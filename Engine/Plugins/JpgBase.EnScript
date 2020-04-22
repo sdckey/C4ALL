@@ -502,12 +502,8 @@ class JpgBase{
   long _validate(EntryClass e, long offset){
     EntryFileClass ef();
 
-    #ifdef VERSION_6
-      ef.Open(e, FileClass::SLACK);
-    #else
-      ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
-    #endif
-
+    ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
+    
     ef.SetCodePage(CodePageClass::ANSI);
 
     return _validate(ef, offset);

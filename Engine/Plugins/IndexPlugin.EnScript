@@ -9,20 +9,6 @@ class ExportClass: NameListClass{
 
   String                     Keyword;
 
-#ifdef IndexClass
-  IndexClass::EntryInfoClass Info;
-
-  ExportClass(ExportClass parent, const String &name, MemoryFileClass memoryFile, IndexClass::EntryInfoClass info, const String &keyword, EntryClass entry):
-    NameListClass(parent, name),
-    MemoryFile = memoryFile,
-    Info = info,
-    Keyword = keyword,
-    Entry = entry
-  {
-  }
-//#else - do something else
-#endif
-
 }
 
 
@@ -73,13 +59,8 @@ class IndexDialog: DialogClass {
       // Index Files to Load
       grpIndexes    (this, ""                  ,    10,  28, 370, 125, 0),
 
-#ifdef ListEditClass::CANVIEWNODES
-      lstIndices    (this, "Index Files to Load:",  20,  35, 350,  75, 0, idx._indices,
-                                ListEditClass::CANVIEWNODES | ListEditClass::CANDELETENODE),
-#else
       lstIndices    (this, "Index Files to Load:",  20,  35, 350,  75, 0, idx._indices,
                                 ContextClass::CANVIEWNODES | ContextClass::CANDELETENODE),
-#endif
 
       btnAddIndexes (this, "Add From Case",        295, 120,  70,  12, 0),
       txtAddIndex   (this, "Add Index:",            20, 122, 220,  12, 0,
@@ -91,15 +72,9 @@ class IndexDialog: DialogClass {
       grpKeywords   (this, ""                  ,    10, 158, 370, 125, 0),
 
 
-#ifdef ListEditClass::CANVIEWNODES
-      lstKeywords   (this, "Input Words (Double-Click To Prompt)",
-                                                    20, 165, 350, 75, 0, idx._keywords,
-                                ListEditClass::CANVIEWNODES | ListEditClass::CANDELETENODE),
-#else
       lstKeywords   (this, "Input Words (Double-Click To Prompt)",
                                                     20, 165, 350, 75, 0, idx._keywords,
                                 ContextClass::CANVIEWNODES | ContextClass::CANDELETENODE),
-#endif
 
       btnAddKeywords(this, "Add From File",        295, 250, 70, 12, 0),
       txtKeyword    (this, "New Keyword:",          20, 252, 110, 10, 0, newKeyword, 256, 0),
@@ -137,20 +112,6 @@ class IndexDialog: DialogClass {
     if(btnAddIndexes.Matches(event)){
       DirectoryClass dir();
       DirRootClass DirRoot(LocalMachine);
-
-#ifdef CaseClass::IndexFolder
-      if (DirRoot.GetListing(Idx._case.IndexFolder(), dir)) {
-        foreach (DirectoryClass d in dir) {
-          if (!d.IsFolder()){
-            if (d.Extension() == "Index") {
-              //Console.WriteLine(Idx._case.IndexFolder() + "\\" + d.Name());
-              new NameListClass(Idx._indices, Idx._case.IndexFolder() + "\\" + d.Name());
-            }
-          }
-        }
-      }
-//#else
-#endif
       lstIndices.SetDataRoot(Idx._indices);
     }
     else if(btnAddIndex.Matches(event)){
@@ -196,13 +157,6 @@ class IndexPlugin:IndexPluginInterface{
   String            _pluginName;
   String            _version;
 
-#ifdef IndexClass
-  IndexClass::QueryClass Query;
-  IndexClass             Index;
-//#else - do something else
-#endif
-
-
 
   // Plugin's Constructor, where the base values are set and any readable values
   //   are loaded from the Storage file
@@ -218,12 +172,6 @@ class IndexPlugin:IndexPluginInterface{
     _header = "";
     _loadSettings();
     _version = "1.0.0";
-
-#ifdef IndexClass
-    Index = new IndexClass;
-    Query = new IndexClass::QueryClass();
-//#else - do something else
-#endif
 
     //_exportList = new ExportClass(null, "", null, null, "", null);
   }
@@ -245,92 +193,6 @@ class IndexPlugin:IndexPluginInterface{
   // Validate will be called once at the start of the case, before the other plugin
   // requirements are handled
   long Run(IndexOutputController output){
-
-#ifdef IndexClass
-    // Load the Index Files
-    forall(NameListClass n in _indices){
-      WriteDebug(_pluginName, "Adding Index File for searching: " + n.Name(), 2);
-      Index.AddIndex(n.Name());
-    }
-
-    // Build the search terms for each provided phrase
-    forall(NameListClass k in _keywords){
-      IndexClass::PhraseClass phrase();
-      phrase.SetWords(k.Name());
-      phrase.SetProximity(100);
-      Query.SetPhrase(phrase);
-      WriteDebug(_pluginName, "Searching for the following keyword(s): " + k.Name(), 2);
-      _console.WriteFullLine("Searching for keyword: " + k.Name());
-
-      // Search the index
-      if(Index.FindFiles(Query)){
-        while(Index.GetNextFile(Query)){
-
-          // return the transcript relating to this entry
-          IndexClass::EntryInfoClass info();
-          Query.GetEntryInfo(info);
-          EntryClass e = Index.GetEntry(info, _case);
-
-          if(e){
-            EntryFileClass ef();
-
-            if(ef.Open(e, FileClass::SLACK)){
-              DocumentClass doc();
-              DocumentClass::TranscriptFileClass transcriptFile();
-              doc.WriteTranscript(ef, transcriptFile, CodePageClass::ACTIVE);
-
-              WriteDebug(_pluginName, "Keyword Found in Entry: " + Query.GetFileName(), 2);
-              _console.WriteFullLine("Keyword Found in Entry: " + Query.GetFileName());
-
-
-              NameListClass list();
-              Query.GetWordList(list, 0, -1);
-              IndexClass::WordHitClass hit();
-
-              while (Query.GetNextHit(hit)) {
-                long start = hit.Offset - 1024;
-                if(start < 0) start = 0;
-
-                long after = 1024;
-                if(hit.Offset + hit.Length + after > transcriptFile.File.GetSize())
-                  after = transcriptFile.File.GetSize() - hit.Offset - hit.Length;
-
-                transcriptFile.File.Seek(start);
-
-                MemoryFileClass mf();
-
-                // Open up 1GB of room
-                if(mf.Open(1000000000, FileClass::WRITE)){
-                  // write out the preceding data
-                  mf.WriteBuffer(transcriptFile.File, hit.Offset - start);
-
-                  // make the hit stand out
-                  mf.Write("<font style='background-color:yellow'>");
-                  mf.WriteBuffer(transcriptFile.File, hit.Length);
-                  mf.Write("</font>");
-
-                  // write out the following data
-                  mf.WriteBuffer(transcriptFile.File, after);
-
-                  mf.Seek(0);
-                  //mf.Close();
-                  IndexCarveClass foundFile(mf, e, mf.GetSize(), 0, _extension, k.Name());
-                  output.CarveFile(foundFile, "");
-                }
-              }
-            }
-            ef.Close();
-            info.Close();
-          }
-          else
-            WriteDebug(_pluginName, "!! Entry not found: " + Query.GetFileName(), 2);
-
-        }
-      }
-    }
-//#else - do something else
-#endif
-
 
     return 0;
   }

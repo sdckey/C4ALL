@@ -32,13 +32,13 @@ class MainClass:ObserverInterface {
   MainClass()
   {
     MyOptions = new OptionsClass();
-    MyOptions.CompileDate     = "18-Jul-2018";
-    MyOptions.ScriptName      = "C4All Strategy (v6/v8)";
-    MyOptions.VersionNum      = "2.0.3.0 BETA";
-    MyOptions.VersionMajor    = 8;
-    MyOptions.VersionMinor    = 7;
+    MyOptions.CompileDate     = "22-Apr-2020";
+    MyOptions.ScriptName      = "C4All Strategy (EnCase 7/8/20)";
+    MyOptions.VersionNum      = "2.0.4.0 BETA";
+    MyOptions.VersionMajor    = 20;
+    MyOptions.VersionMinor    = 2;
     MyOptions.VersionSubMajor = 0;
-    MyOptions.VersionSubMinor = 93;
+    MyOptions.VersionSubMinor = 185;
 
     // This is the onlyt legitimate construction of the ConsoleController
     MyConsole = new ConsoleController(MyOptions);
@@ -147,18 +147,10 @@ class MainClass:ObserverInterface {
       sc.SetCaseName(c.Name());
 
       // Step 5:  Start the Dialog
-#ifdef VERSION_6
-      DialogClass     mainDlg(null, MyOptions.ScriptName + " EnScript");
+        DialogClass     mainDlg(null, MyOptions.ScriptName + " EnScript");
         SettingsDialog  settings(mainDlg, MyOptions, MyHelp, MyActivePlugins, MyConsole);
         ReportDialog    rpt(mainDlg, MyOptions, MyHelp);
         ExcludeDialog   ext(mainDlg, MyOptions, MyHelp);
-        ZipDialog       zip(mainDlg, MyOptions);
-#else
-      DialogClass     mainDlg(null, MyOptions.ScriptName + " EnScript");
-        SettingsDialog  settings(mainDlg, MyOptions, MyHelp, MyActivePlugins, MyConsole);
-        ReportDialog    rpt(mainDlg, MyOptions, MyHelp);
-        ExcludeDialog   ext(mainDlg, MyOptions, MyHelp);
-#endif
       // ===========================================================================
 
       if(mainDlg.Execute() == SystemClass::OK){
@@ -300,12 +292,8 @@ class MainClass:ObserverInterface {
                    myNote +
                    "\r\n" +
                    "\r\n";
-#ifdef VERSION_6
-      MyPictureOutput.BookmarkRoot.AddNote(myNote, 0, 0, 0);
-#else
       BookmarkTextClass note(MyPictureOutput.BookmarkRoot, "C4P Results");
       note.SetComment(myNote);
-#endif
     }
     if(MyMovieOutput){
       myNote = MakeCaseNote(myEnd, MyMovieOutput);
@@ -314,12 +302,8 @@ class MainClass:ObserverInterface {
                                  "\r\n" +
                                  myNote);
 
-#ifdef VERSION_6
-      MyMovieOutput.BookmarkRoot.AddNote(myNote, 0, 0, 0);
-#else
       BookmarkTextClass note(MyMovieOutput.BookmarkRoot, "C4M Results");
       note.SetComment(myNote);
-#endif
       returnNote = returnNote +
                    "C4M Results:\r\n" +
                    "=====================================" +

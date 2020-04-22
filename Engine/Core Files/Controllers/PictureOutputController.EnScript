@@ -50,16 +50,6 @@ class PictureOutputController: OutputController {
   virtual void Initialize(bool trustMe, ActivePlugins plugins){
 
     // Create Default Bookmark Structure
-#ifdef VERSION_6
-    BookmarkRoot = new BookmarkFolderClass(null, "");
-    BookmarkRoot = new BookmarkFolderClass(BookmarkRoot, "C4P Results - " + MyOptions.StartDate + " " + MyOptions.StartTime);
-    BookmarkRoot.AddNote("EnScript Compile Date: " + MyOptions.CompileDate, 0, 0, 0);
-
-    // And then, if desired, add pre-cat folders
-    if(MyOptions.MakeBookmarks)
-      BookmarkRoot.SetComment("Results categorized from Hash Database");
-
-#else
     //BookmarkRoot = new BookmarkClass(MyOptions.Case.BookmarkRoot(), "");
     BookmarkRoot = new BookmarkClass(MyOptions.Case.BookmarkRoot(), "C4P Results - " + MyOptions.StartDate + " " + MyOptions.StartTime, NodeClass::FOLDER);
 
@@ -69,8 +59,6 @@ class PictureOutputController: OutputController {
 
     BookmarkTextClass note(BookmarkRoot, "Note", 0);
     note.SetComment("EnScript Compile Date: " + MyOptions.CompileDate);
-#endif
-
 
     // Case Root
     MyReportPath = MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName;
@@ -126,18 +114,10 @@ class PictureOutputController: OutputController {
 
     // Excluded Bookmarks
     if(MyOptions.ExcludePreCatVal > 0)
-    #ifdef VERSION_6
-      ExcludeRoot = new BookmarkFolderClass(BookmarkRoot, "Excluded by Pre-Cat");
-    #else
       ExcludeRoot = new BookmarkClass(BookmarkRoot, "Excluded by Pre-Cat", NodeClass::FOLDER);
-    #endif
 
     // Failed Bookmarks
-  #ifdef VERSION_6
-    FailedRoot = new BookmarkFolderClass(BookmarkRoot, "Failed to Extract");
-  #else
     FailedRoot = new BookmarkClass(BookmarkRoot, "Failed to Extract", NodeClass::FOLDER);
-  #endif
 
     // First Export Folder
     if(!MyOptions.ExportByHash)
@@ -164,12 +144,7 @@ class PictureOutputController: OutputController {
       EntryFileClass ef();
       if(!pc.MF){
 
-        #ifdef VERSION_6
-          ef.Open(pc.Entry, FileClass::SLACK);
-        #else
-          ef.Open(pc.Entry, FileClass::SLACK | FileClass::NOINITIALIZE);
-        #endif
-
+        ef.Open(pc.Entry, FileClass::SLACK | FileClass::NOINITIALIZE);
         if(!ef)
           MyConsole.WriteFullLine("Failed to open entry: " + path + pc.Entry.FullPath());
       }
@@ -236,11 +211,7 @@ class PictureOutputController: OutputController {
           WriteDebug("OutputController", "File validated, but excluded by user (category " + category + ")");
 
         if(MyOptions.BookmarkExcludedPreCat)
-#ifdef VERSION_6
-          ExcludeRoot.AddBookmark(pc.Entry, pc.Offset, 10, "Excluded Pre-Cat Hit (" + category + ")", BookmarkClass::SHOWPICTURE, BookmarkClass::PICTURE);
-#else
           AddPictureBookmark(ExcludeRoot, pc.Entry.Name(), "Excluded Pre-Cat Hit (" + category + ")", pc.Entry, pc.Offset, 10);
-#endif
       }
       else {
         FileCount++;
@@ -358,11 +329,7 @@ class PictureOutputController: OutputController {
     }
 
     XMLCharacterController xml();
-#ifdef VERSION_6
-    String fullPath = xml.ConvertChar(path + pc.Entry.FullPath(), "*");
-#else
     String fullPath = xml.ConvertChar(path + pc.Entry.TruePath(), "*");
-#endif
     //String metaData = xml.ConvertChar(pc.MetaData, "");
     //metaData = "";
 
@@ -388,9 +355,7 @@ class PictureOutputController: OutputController {
                 "    <fileSize>"           + pc.FileLength                               + "</fileSize>\r\n" +
                 "    <bitDepth>"           + pc.BitDepth                                 + "</bitDepth>\r\n" +
                 "    <aspectRatio>"        + pc.AspectRatio                              + "</aspectRatio>\r\n" +
-              #ifndef VERSION_6
                 "    <monikers>"           + pc.Monikers                                 + "</monikers>\r\n" +
-              #endif
                 "  </Image>\r\n";
 
 

@@ -89,12 +89,8 @@ class MovPlugin: MoviePluginInterface{
     // Set the CodePage
     EntryFileClass ef();
 
-    #ifdef VERSION_6
-      ef.Open(e, FileClass::SLACK);
-    #else
-      ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
-    #endif
-
+    ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
+    
     ef.SetCodePage(CodePageClass::ANSI);
 
     // point the Entry to the starting offset

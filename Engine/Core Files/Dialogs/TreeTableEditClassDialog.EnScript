@@ -9,15 +9,9 @@ class TreeTableEditClassDialog: DialogClass {
 
   TreeTableEditClassDialog(DialogClass parent, PluginListClass plugins, AutoHandlerClass handler, const String &header):
     DialogClass    (parent, "Available " + header + " Plugins:"),
-#ifdef VERSION_6
-      lst          (this, "Select the File Formats that you want to search for", 10, 10, 550, 250, 0, plugins, TreeTableEditClass::CANCHECK | TreeTableEditClass::CANINCLUDE,
-                    TreeTableEditClass::SHOWCOLS | TreeTableEditClass::SHOWROWS | TreeTableEditClass::SHOWROWGRID,
-                    handler),
-#else
       lst          (this, "Select the File Formats that you want to search for", 10, 10, 550, 250, 0, plugins, ContextClass::CANCHECK | ContextClass::CANINCLUDE,
                     TreeTableEditClass::SHOWCOLS | TreeTableEditClass::SHOWROWS | TreeTableEditClass::SHOWROWGRID,
                     handler),
-#endif
       txt          (this, "Double-click a Format to change / view it's settings", 30, 278, 100, 12, 0),
 
       Plugins = plugins

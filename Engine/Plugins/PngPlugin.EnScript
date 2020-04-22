@@ -137,12 +137,7 @@ class PngPlugin:PicturePluginInterface{
 
     EntryFileClass file();
 
-    #ifdef VERSION_6
-      file.Open(e, FileClass::SLACK);
-    #else
-      file.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
-    #endif
-
+    file.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
     file.SetCodePage(CodePageClass::ANSI);
 
     long UseThisLength;

@@ -21,26 +21,14 @@ class VersionController {
     if(SystemClass::MinorVersion() < MyOptions.VersionMinor)
       return false;
 
-    #ifdef SystemClass::SubMajorVersion
       // same submajor
       if(SystemClass::SubMajorVersion() < MyOptions.VersionSubMajor)
         return false;
 
-      #ifdef SystemClass::SubMinorVersion
         // sam subMinor
         if(SystemClass::SubMinorVersion() < MyOptions.VersionSubMinor)
           return false;
         else
           return true;
-
-      #else
-        return false;
-
-      #endif
-
-    #else
-      return false;
-
-    #endif
   }
 }

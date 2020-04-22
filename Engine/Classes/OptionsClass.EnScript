@@ -5,11 +5,6 @@
   It is then used for the subsequent execution.
 */
 
-#ifdef VERSION_6
-typedef EntryClass[] EntryArray;
-#endif
-
-
 typedef String[] StringArray;
 
 class OptionsClass {
@@ -35,10 +30,7 @@ class OptionsClass {
 
   LogicalEvidenceFileClass Lef;
 
-#ifdef VERSION_8
   bool        ExcludeTagged;
-#endif
-
   bool        ExportByHash;
   bool        IgnoreFailedExtract;
   bool        MakeBookmarks;
@@ -46,11 +38,7 @@ class OptionsClass {
   bool        SearchSlack;
   bool        IgnoreSmall;
 
-#ifdef VERSION_6
-  EntryArray  SelectedEntries;
-#else
   ItemIteratorClass MyIter;
-#endif
 
   int         DbType;
   int         ExcludePreCatVal;
@@ -79,9 +67,7 @@ class OptionsClass {
   String      StartTime;
   String      VersionNum;
 
-#ifdef VERSION_8
   StringArray SelectedTags;
-#endif
 
 
   OptionsClass()
@@ -108,10 +94,8 @@ class OptionsClass {
 
     LoginName = "c4p_user";
     Password = "password";
-#ifdef VERSION_8
     SelectedTags = new StringArray;
     MyIter = new ItemIteratorClass(Case, ItemIteratorClass::NOPROXY | ItemIteratorClass::NORECURSE, ItemIteratorClass::ALL);
-#endif
   }
 
   ~OptionsClass()
@@ -121,14 +105,6 @@ class OptionsClass {
 
   void SetCase(CaseClass c){
     Case = c;
-
-#ifdef VERSION_6
-    SelectedEntries = new EntryArray(0, c.EntryRoot().CountAll(NodeClass::SELECTED, NodeClass::COUNTNODES | NodeClass::COUNTFOLDERS | NodeClass::COUNTRECURSIVE));
-    forall(EntryClass e in c.EntryRoot()){
-      if(e.IsSelected())
-        SelectedEntries.Add(e);
-    }
-#endif
   }
 
   // ## Status Bar Operations

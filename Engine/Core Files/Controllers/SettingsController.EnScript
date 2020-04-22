@@ -65,9 +65,6 @@ class SettingsController {
 
 
     MyOptions.CopyProtected = true;
-#ifdef VERSION_6
-    MyOptions.ForensicAnalyst = MyOptions.Case.Examiner();
-#else
     // If the Case has CaseInfoItems, then read through them, looking for "Examiner Name"
     MyOptions.ForensicAnalyst = "";
     if(MyOptions.Case.HasCaseInfoList()){
@@ -78,7 +75,6 @@ class SettingsController {
         }
       }
     }
-#endif
     MyOptions.SearchSelected = false;
     MyOptions.MakeBookmarks = false;
     MyOptions.ReportPath = MyOptions.Case.ExportFolder();

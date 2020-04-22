@@ -9,12 +9,7 @@ include "ConsoleController"
 
 class SearchController {
 
-#ifdef VERSION_6
-  BookmarkFolderClass   SmallFilesRoot;
-#else
   BookmarkClass         SmallFilesRoot;
-#endif
-
   ActivePlugins       MyPlugins;
   OptionsClass        MyOptions;
   ConsoleController   MyConsole;
@@ -58,12 +53,7 @@ class SearchController {
 
   void InitializeSmallFilesBookmark()
   {
-#ifdef VERSION_6
-    SmallFilesRoot = new BookmarkFolderClass(null, "");
-    SmallFilesRoot = new BookmarkFolderClass(SmallFilesRoot, "C4All Files Ignored as Small");
-#else
     SmallFilesRoot = new BookmarkClass(MyOptions.Case.BookmarkRoot(), "C4All Files Ignored as Small", NodeClass::FOLDER);
-#endif
   }
 
   void HandleSmallFile(EntryClass entry, long offset, long carveSize)
@@ -72,15 +62,11 @@ class SearchController {
     if(!SmallFilesRoot)
       InitializeSmallFilesBookmark();
 
-#ifdef VERSION_6
-    SmallFilesRoot.AddBookmark(entry, offset, carveSize, "Offset " + offset, BookmarkClass::SHOWPICTURE, BookmarkClass::PICTURE);
-#else
     BookmarkImageClass data(SmallFilesRoot, entry.Name());
     data.CopyItemData(entry);
     data.SetDataSize(carveSize);
     data.SetDataOffset(offset);
     data.SetComment("Offset " + offset);
-#endif
   }
 
 
@@ -240,16 +226,9 @@ class SearchController {
     if(entry.LogicalSize() > entry.PhysicalSize())
       entryLength = entry.LogicalSize();
 
-    String msg;
-#ifdef VERSION_6
-    msg = "Searching:  " +
-           path + entry.FullPath() + " [offset: " +
-           searchStart + "; PL: " + String::FormatInt(entry.PhysicalLocation(), int::DECIMAL, 1) + "]";
-#else
-  msg = "Searching:  " +
+    String msg = "Searching:  " +
            path + entry.TruePath() + " [offset: " +
            searchStart + "; PL: " + String::FormatInt(entry.PhysicalLocation(), int::DECIMAL, 1) + "]";
-#endif
 
     MyConsole.WritePartLine(msg);
 
@@ -351,12 +330,8 @@ class SearchController {
 
     EntryFileClass ef();
 
-    #ifdef VERSION_6
-      ef.Open(entry, FileClass::SLACK);
-    #else
       ef.Open(entry, FileClass::SLACK | FileClass::NOINITIALIZE);
-    #endif
-
+    
     if(ef){
       Search_Base(entry, ef, startingAt, path);
     }

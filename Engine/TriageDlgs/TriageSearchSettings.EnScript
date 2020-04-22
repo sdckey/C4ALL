@@ -167,12 +167,8 @@ class TriageSearchSettings : DialogClass {
     }
 
     // Create a manual handler for this list, which defines how and what we will display
-#ifdef VERSION_6
-    AutoHandlerClass  handler(Plugins.DynamicType(), "C4All Plugins", true);
-#else
     IconClass iconid;
     AutoHandlerClass  handler(Plugins.DynamicType(), "C4All Plugins", true, "", iconid);
-#endif
 
     TreeTableEditClassDialog dlg(this, Plugins, handler, "Picture");
 

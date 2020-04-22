@@ -14,15 +14,9 @@ include "..\\..\\Classes\\OptionsClass"
 class OutputController {
 
 
-#ifdef VERSION_6
-  BookmarkFolderClass   BookmarkRoot,
-                        ExcludeRoot,
-                        FailedRoot;
-#else
   BookmarkClass         BookmarkRoot,
                         ExcludeRoot,
                         FailedRoot;
-#endif
 
   ConsoleController     MyConsole;
   DataController        MyData;
@@ -124,7 +118,6 @@ class OutputController {
   // ##
 
 
-#ifdef VERSION_8
   // ## Bookmarking
   void AddPictureBookmark(BookmarkClass parent, const String &name, const String &comment, EntryClass e, long fileOffset, long fileSize){
     BookmarkDecodeClass data(parent, name);
@@ -134,8 +127,6 @@ class OutputController {
     data.SetCodingType(PICTURE);
     data.SetComment(comment);
   }
-#endif
-
 
   // ## File / Folder Output
   void ClearCurrentReport(){
@@ -334,11 +325,7 @@ class OutputController {
               // do something...should we bookmark?
               Console.WriteLine("File could not be extracted.  Bookmarking instead: " + path);
 
-#ifdef VERSION_6
-              FailedRoot.AddBookmark(cc.Entry, cc.Offset, 10, "Could not Extract File", BookmarkClass::SHOWPICTURE, BookmarkClass::PICTURE);
-#else
               AddPictureBookmark(FailedRoot, cc.Entry.Name(), "Could not Extract File", cc.Entry, cc.Offset, 10);
-#endif
               return false;
             }
             else {
@@ -385,11 +372,7 @@ class OutputController {
     if(!this) return;
 
     if(MyOptions.MakeBookmarks){
-#ifdef VERSION_6
-      BookmarkRoot.AddBookmark(cc.Entry, cc.Offset, cc.FileLength, fileName, BookmarkClass::SHOWPICTURE, BookmarkClass::PICTURE);
-#else
       AddPictureBookmark(BookmarkRoot, cc.Entry.Name(), fileName, cc.Entry, cc.Offset, cc.FileLength);
-#endif
     }
   }
 

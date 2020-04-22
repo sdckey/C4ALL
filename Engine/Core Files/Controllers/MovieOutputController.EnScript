@@ -49,16 +49,6 @@ class MovieOutputController : OutputController {
 
   virtual void Initialize(bool trustMe, ActivePlugins plugins){
 
-#ifdef VERSION_6
-    BookmarkRoot = new BookmarkFolderClass(null, "");
-    BookmarkRoot = new BookmarkFolderClass(BookmarkRoot, "C4M Results - " + MyOptions.StartDate + " " + MyOptions.StartTime);
-    BookmarkRoot.AddNote("EnScript Compile Date: " + MyOptions.CompileDate, 0, 0, 0);
-
-    // And then, if desired, add pre-cat folders
-    if(MyOptions.MakeBookmarks)
-      BookmarkRoot.SetComment("Results categorized from Hash Database");
-
-#else
     //BookmarkRoot = new BookmarkClass(MyOptions.Case.BookmarkRoot(), "");
     BookmarkRoot = new BookmarkClass(MyOptions.Case.BookmarkRoot(), "C4M Results - " + MyOptions.StartDate + " " + MyOptions.StartTime, NodeClass::FOLDER);
 
@@ -68,8 +58,6 @@ class MovieOutputController : OutputController {
 
     BookmarkTextClass note(BookmarkRoot, "Note", 0);
     note.SetComment("EnScript Compile Date: " + MyOptions.CompileDate);
-#endif
-
 
     // Case Root
     MyReportPath = MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName;
@@ -128,11 +116,9 @@ class MovieOutputController : OutputController {
       }
     }
 
-#ifdef BookmarkFolderClass
     // Excluded Bookmarks
     if(MyOptions.ExcludePreCatVal > 0)
       ExcludeRoot = new BookmarkFolderClass(BookmarkRoot, "Excluded by Pre-Cat");
-#endif
 
     // C4P Index.xml
     StartIndexFile();
@@ -155,12 +141,7 @@ class MovieOutputController : OutputController {
       EntryFileClass ef();
       if(!mc.MF){
 
-        #ifdef VERSION_6
-          ef.Open(mc.Entry, FileClass::SLACK);
-        #else
-          ef.Open(mc.Entry, FileClass::SLACK | FileClass::NOINITIALIZE);
-        #endif
-
+        ef.Open(mc.Entry, FileClass::SLACK | FileClass::NOINITIALIZE);
         if(!ef)
           MyConsole.WriteFullLine("Failed to open entry: " + path + mc.Entry.FullPath());
       }
@@ -225,13 +206,8 @@ class MovieOutputController : OutputController {
         if(MyOptions.Debug)
           WriteDebug("OutputController", "File validated, but excluded by user (category " + category + ")");
 
-#ifdef VERSION_6
-        if(MyOptions.BookmarkExcludedPreCat)
-          ExcludeRoot.AddBookmark(mc.Entry, mc.Offset, 10, "Excluded Pre-Cat Hit (" + category + ")", BookmarkClass::SHOWPICTURE, BookmarkClass::PICTURE);
-#else
         if(MyOptions.BookmarkExcludedPreCat)
           AddPictureBookmark(ExcludeRoot, mc.Entry.Name(), "Excluded Pre-Cat Hit (" + category + ")", mc.Entry, mc.Offset, 10);
-#endif
       }
       else {
         FileCount++;
@@ -347,12 +323,7 @@ class MovieOutputController : OutputController {
     }
 
     XMLCharacterController xml();
-#ifdef VERSION_6
-    String fullPath = xml.ConvertChar(path + mc.Entry.FullPath(), "*");
-#else
     String fullPath = xml.ConvertChar(path + mc.Entry.TruePath(), "*");
-#endif
-
     //String metaData = xml.ConvertChar(mc.MetaData, "");
 
     lineValue = "  <Movie>\r\n" +
@@ -376,9 +347,7 @@ class MovieOutputController : OutputController {
                 "    <notes>"              + " "                                         + "</notes>\r\n" +
                 "    <fileSize>"           + mc.FileLength                               + "</fileSize>\r\n" +
                 "    <movieLength>"        + mc.MovieLength                              + "</movieLength>\r\n" +
-              #ifndef VERSION_6
                 "    <monikers>"           + mc.Monikers                                 + "</monikers>\r\n" +
-              #endif
                 "  </Movie>\r\n";
 
 
@@ -441,12 +410,6 @@ class MovieOutputController : OutputController {
              "Additionally, " + CatX + " image(s) were validated but NOT extracted.\r\n" +
              "These were found in the Hash Database and excluded (as specified by the User)";
     EndCaseReport();
-
-#ifdef VERSION_6
-    BookmarkRoot.AddNote(myNote, 0, 0, 0);
-#else
-    // STUB
-#endif
 
     return myNote;
   }

@@ -15,9 +15,7 @@ class PictureCarveClass: CarveClass {
     Extension = extension,
     MetaData = metaData
   {
-  #ifndef VERSION_6
     GetMonikers();
-  #endif
   }
 
   PictureCarveClass(EntryClass entry, double aspectRatio, double bitDepth, long fileLength, long offset, const String &extension, const String &metaData):
@@ -29,8 +27,6 @@ class PictureCarveClass: CarveClass {
     Extension = extension,
     MetaData = metaData
   {
-  #ifndef VERSION_6
     GetMonikers();
-  #endif
   }
 }
