@@ -1,7 +1,7 @@
 # C4ALL
 Repository for the C4ALL EnCase EnScript application originally created by Trevor Fairchild.
 
-Please note that this project is not in active development. Updates are made purely for compatibility with Encase
+Please note that this project is not in active development. Updates are made solely for compatibility with EnCase.
 
 Version History
 ---------------
