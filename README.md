@@ -3,6 +3,10 @@ Repository for the C4ALL EnCase EnScript application originally created by Trevo
 
 Please note that this project is not in active development. Updates are made solely for compatibility with EnCase.
 
+Download releases from the [Releases](https://github.com/sdckey/C4ALL/releases) page.
+
+Note that all files must be extracted from a release-archive preserving the relative paths in the process.
+
 Version History
 ---------------
 
