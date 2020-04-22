@@ -57,12 +57,8 @@ class RarClass {
         MyMovieOutput.WriteDebug("RARClass", "== Opening Entry for examination...");
       }
 
-      #ifdef VERSION_6
-        file.Open(entry, FileClass::SLACK);
-      #else
-        file.Open(entry, FileClass::SLACK | FileClass::NOINITIALIZE);
-      #endif
-
+      file.Open(entry, FileClass::SLACK | FileClass::NOINITIALIZE);
+      
       if(file){
         if(MyOptions.Debug) {
           MyPictureOutput.WriteDebug("RARClass", "success");

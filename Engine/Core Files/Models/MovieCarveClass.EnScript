@@ -13,9 +13,7 @@ class MovieCarveClass: CarveClass {
     Extension = extension,
     MetaData = metaData
   {
-  #ifndef VERSION_6
     GetMonikers();
-  #endif
   }
 
   MovieCarveClass(EntryClass entry, long fileLength, long offset, const String &extension, const String &metaData, double movieLength):
@@ -26,8 +24,5 @@ class MovieCarveClass: CarveClass {
     Extension = extension,
     MetaData = metaData
   {
-  #ifndef VERSION_6
-    GetMonikers();
-  #endif
   }
 }

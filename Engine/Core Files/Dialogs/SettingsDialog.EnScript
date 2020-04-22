@@ -15,7 +15,6 @@ include "TreeTableEditClassDialog"
 
 include "..\\Controllers\\DataController"
 
-#ifdef VERSION_8
 class TagDialog: DialogClass{
   TreeTableEditClass tree;
 
@@ -25,14 +24,9 @@ class TagDialog: DialogClass{
     {
     }
 }
-#endif
-
 
 class SettingsDialog: DialogClass {
 //
-//#ifdef VERSION_8
-//  int SearchSelected;
-//#endif
 
   OptionsClass      MyOptions;
   ActivePlugins     MyActivePlugins;
@@ -49,10 +43,6 @@ class SettingsDialog: DialogClass {
 
   // Selected Files Options
   RadioButtonClass  radSelection;
-#ifdef VERSION_6
-  CheckBoxClass     chkSlack;
-  CheckBoxClass     chkUC;
-#endif
 
   // Search Options
   GroupBoxClass     grpSettings;
@@ -94,18 +84,11 @@ class SettingsDialog: DialogClass {
       btnHelp      (this, "?",                              290,  10,  20, 12, 0),
 
       // Selected Files Options
-#ifdef VERSION_6
-      radSelection (this, "Selected Files Options:",         10,  70, 150, 57, 0, myOptions.SearchSelected, "Search All Files\tSearch Selected Files Only\tExclude Selected Files"),
-      chkSlack     (this, "Search File Slack Regardless",    25, 130, 100, 12, 0, myOptions.SearchSlack),
-      chkUC        (this, "Exclude Unallocated Regardless",  25, 140, 100, 12, 0, myOptions.ExcludeUnallocated),
-#else
       radSelection (this, "Selected Files Options:",         10,  70, 150, 57, 0, myOptions.SearchSelected,
                                                                                                   "Search All Files\t" +
                                                                                                   "Search All Tagged Files\t"
                                                                                                   "Exclude All Tagged Files\t" +
                                                                                                   "Search Current View Only"),
-#endif
-
       // Search Options
       grpSettings  (this, "Search Options:",                 10, 160, 150, 85, 0),
       btnPlugins   (this, "Change Plugin Settings",          20, 175, 135, 12, 0),
@@ -129,8 +112,8 @@ class SettingsDialog: DialogClass {
       grpCompile   (this, "Script Details:",                 10, 250, 300, 75, 0),
       txtVersion   (this, "Special Note:  Anti-Virus programs can wind up deleting or quarantining\n" +
                           "files that are exported by this EnScript.  Forewarned is forearmed.\n\n" +
-                          "                       " + myOptions.Comments + "\n" +
-                          "                                 Compile Date: " + MyOptions.CompileDate + "\n" +
+                          "                            " + myOptions.Comments + "\n" +
+                          "                                     Compile Date: " + MyOptions.CompileDate + "\n" +
                           "                                    EnScript Version: " + myOptions.VersionNum,
                                                              25, 265, 200, 12, 0),
 
@@ -139,11 +122,6 @@ class SettingsDialog: DialogClass {
       MyActivePlugins = myActivePlugins,
       MyConsole = myConsole
   {
-#ifdef VERSION_6
-    // Disable chkSlack as required
-    if(MyOptions.SearchSelected == 0)
-      chkSlack.Enable(false);
-#endif
     chkDebugCurr.Enable(false);
     txtDebug.SetVisible(false);
   }
@@ -193,12 +171,8 @@ class SettingsDialog: DialogClass {
       }
 
       // Create a manual handler for this list, which defines how and what we will display
-#ifdef VERSION_6
-      AutoHandlerClass  handler(Plugins.DynamicType(), "C4All Plugins", true);
-#else
       IconClass iconid;
       AutoHandlerClass  handler(Plugins.DynamicType(), "C4All Plugins", true, "", iconid);
-#endif
 
       TreeTableEditClassDialog dlg(this, Plugins, handler, "Picture");
 
@@ -227,7 +201,6 @@ class SettingsDialog: DialogClass {
       else if (radDatabase.GetValue() == 2)
         (new OdbcDialog(this, MyOptions, MyHelp)).Execute();
 
-#ifdef VERSION_8
       // In v7 we have the ability to test for connection errors
       if(radDatabase.GetValue() == 1 || radDatabase.GetValue() == 2)
       {
@@ -239,20 +212,11 @@ class SettingsDialog: DialogClass {
           radDatabase.SetValue(0);
         }
       }
-#endif
     }
 
     // What to do if the user choose a selected files option
     else if(radSelection.Matches(event)){
 
-#ifdef VERSION_6
-      if(radSelection.GetValue() > 0){
-        chkSlack.Enable(true);
-      } else {
-        chkSlack.Enable(false);
-        chkSlack.SetValue(false);
-      }
-#else
       int sel = radSelection.GetValue();
       if(sel == 1 || sel == 2){
       //if(radSelection.GetValue() != 0){
@@ -284,7 +248,6 @@ class SettingsDialog: DialogClass {
       }
       else
         MyOptions.ExcludeTagged = false;
-#endif
     }
   }
 }

@@ -148,13 +148,10 @@ class 3GPPlugin:MoviePluginInterface{
     // Open the Entry and jump to the search hit location
     EntryFileClass ef();
 
-    #ifdef VERSION_6
-      ef.Open(e, FileClass::SLACK);
-    #else
-      ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
-    #endif
-
+    ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
+    
     ef.SetCodePage(CodePageClass::ANSI);
+    
     ef.Seek(offset);
 
     // Specify the largest possible size this 3GP could be, based on the available data

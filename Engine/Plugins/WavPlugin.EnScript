@@ -89,12 +89,8 @@ class WavPlugin: MoviePluginInterface{
     // Open the entry into the file
     EntryFileClass file();
 
-    #ifdef VERSION_6
-      file.Open(e, FileClass::SLACK);
-    #else
-      file.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
-    #endif
-
+    file.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
+    
     file.SetCodePage(CodePageClass::ANSI);
     file.Seek(offset);
 

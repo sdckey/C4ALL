@@ -41,12 +41,8 @@ class DecoderClass {
 
     _observer.WriteDebug("DecoderClass", "DecodeEntry called at offset: " + offset, true);
 
-    #ifdef VERSION_6
-      ef.Open(entry, FileClass::SLACK);
-    #else
-      ef.Open(entry, FileClass::SLACK | FileClass::NOINITIALIZE);
-    #endif
-
+    ef.Open(entry, FileClass::SLACK | FileClass::NOINITIALIZE);
+    
     if(ef){
       ef.SetCodePage(CodePageClass::ANSI);
       ef.Seek(offset);

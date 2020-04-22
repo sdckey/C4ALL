@@ -23,7 +23,6 @@ class DataController {
   {
   }
 
-#ifdef VERSION_8
   bool TestConnection()
   {
     bool isgood = true;
@@ -73,7 +72,6 @@ class DataController {
 
     return isgood;
   }
-#endif
 
   void SetConnection(){
     if(MyOptions.DbType == 0){

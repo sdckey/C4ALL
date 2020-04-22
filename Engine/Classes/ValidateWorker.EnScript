@@ -35,58 +35,6 @@ class ValidateWorker {
     MySqlite = null;
   }
 
-#ifdef VERSION_6
-  EntryClass FindByForce(HitClass h, CaseClass c){
-    forall(EntryClass e in c.EntryRoot()){
-      if(e.FullPath() == c.Name() + "\\" + h.DeviceName + "\\" + h.FullPath){
-        if(e.PhysicalSector() == h.PhysicalSector)
-          return e;
-      }
-    }
-    return null;
-  }
-
-  EntryClass FindByPath(HitClass h, CaseClass c){
-    EntryClass e = c.EntryRoot();
-    e = e.Find(h.DeviceName + "\\" + h.FullPath);
-    if(e){
-      if(e.PhysicalSector() == h.PhysicalSector)
-        return e;
-    }
-    return null;
-  }
-
-  EntryClass FindByDisk(HitClass h, CaseClass c){
-    DeviceClass d;
-    foreach(DeviceClass dev in c.DeviceRoot()){
-      if(dev.Name() == h.DeviceName){
-        d = dev;
-        break;
-      }
-    }
-
-    if(d){
-      // Attempt to find this record via Device View
-      long fileoffset = h.Offset;
-      long sector = h.PhysicalSector;
-      uint offset;
-
-      EntryClass e = d.GetEntry(sector, offset, fileoffset);
-
-      if(e){
-        if(e.FullPath() == c.Name() + "\\" + h.DeviceName + "\\" + h.FullPath)
-          return e;
-      }
-    } else
-      Console.WriteLine("\nDEVICE NOT FOUND: " + h.DeviceName);
-
-    return null;
-  }
-#else
-// Version 7 shit goes here
-#endif
-
-
   void Start()
   {
     MyConsole.WriteLine("");
