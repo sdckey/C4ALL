@@ -1,0 +1,80 @@
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+include "ASF_Data_Packet"
+typedef ASF_Data_Packet[] DataPackets;
+
+class ASF_Data_Object {
+
+  ulong  ObjectId1;
+  ulong  ObjectId2;
+  long   ObjectSize;
+  ulong  FileId1;
+  ulong  FileId2;
+  long   TotalDataPackets;
+  long   Reserved;
+  DataPackets dataPackets;
+
+  bool  keepWorking;
+  long  dataPacketSize;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+
+  ASF_Data_Object(const String &thePluginName, ObserverInterface theObserver){
+    dataPackets = new DataPackets();
+    _pluginName = thePluginName;
+    _observer = theObserver;
+  }
+
+
+
+  void Read(EntryFileClass ef, const long &offset, long dataPacketSize, long minimumDataPackets){
+    ef.Seek(offset);
+    keepWorking = true;
+
+    ObjectId1 = ef.ReadBinaryInt(8, true);
+    ObjectId2 = ef.ReadBinaryInt(8, true);
+    ObjectSize = ef.ReadBinaryInt(8, false);
+
+    if(offset + ObjectSize <= ef.GetSize() || true){
+      FileId1 = ef.ReadBinaryInt(8, true);
+      FileId2 = ef.ReadBinaryInt(8, true);
+      TotalDataPackets = ef.ReadBinaryInt(8, false);
+      Reserved = ef.ReadBinaryInt(2, false);
+
+      _observer.WriteDebug(_pluginName, "  ASF_Data_Object", false);
+      _observer.WriteDebug(_pluginName, "  =================", false);
+      _observer.WriteDebug(_pluginName, "    Offset: " + offset, false);
+      _observer.WriteDebug(_pluginName, "    Object Size: " + ObjectSize, false);
+      _observer.WriteDebug(_pluginName, "    Data Packets: " + TotalDataPackets, false);
+
+
+      for(int i = 0 ; i < TotalDataPackets; i++){
+        _observer.WriteDebug(_pluginName, "", false);
+        _observer.WriteDebug(_pluginName, "    ASF_Data_Packet(" + i + ") at offset: " + ef.GetPos(), false);
+        _observer.WriteDebug(_pluginName, "    =========================================", false);
+
+        ASF_Data_Packet dp(ef, dataPacketSize, _pluginName, _observer);
+        dataPackets.Add(dp);
+
+        if(!dp.keepWorking){
+          // Means the data packet process encountered a 'show stopper' error
+          keepWorking = false;
+          break;
+        }
+      }
+
+      _observer.WriteDebug(_pluginName, "", false);
+    }
+    else
+      _observer.WriteDebug(_pluginName, "Not enough data for ASF_Data_Object", false);
+
+    if(!keepWorking){
+      // Impose a minimum of complete packets for a viewable WMV file
+      if(dataPackets.Count() > minimumDataPackets)
+        keepWorking = true;
+      else
+        _observer.WriteDebug(_pluginName, "Validation failed and the identified data stream had less than the minimum number of packets (" + minimumDataPackets + ") to be considered 'playable'", false);
+    }
+  }
+}

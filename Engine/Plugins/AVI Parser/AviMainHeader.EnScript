@@ -1,0 +1,12 @@
+class AviMainHeader{
+  long dwMicroSecPerFrame;
+  long dwMaxBytesPerSec;
+  long dwPaddingGranularity;
+  long dwFlags;
+  long dwTotalFrames;
+  long dwInitialFrames;
+  long dwStream;
+  long dwSuggestedBufferSize;
+  long dwWidth;
+  long dwHeight;
+}

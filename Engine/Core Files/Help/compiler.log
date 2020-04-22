@@ -1,0 +1,15 @@
+Microsoft HTML Help Compiler 4.74.8702
+
+Compiling d:\EnScripts\C4P v4x\C4P402\Help\C4P_EnScript.chm
+
+HHC3004: Warning: Resume_Settings.htm : The HTML tag "?xml:namespace prefix = o ns = "urn:schemas-micr..." is not a valid HTML tag (it does not begin with an alphanumeric character).
+
+Compile time: 0 minutes, 1 second
+8	Topics
+30	Local links
+10	Internet links
+0	Graphics
+
+
+Created d:\EnScripts\C4P v4x\C4P402\Help\C4P_EnScript.chm, 37,318 bytes
+Compression decreased file by 35,192 bytes.

@@ -1,0 +1,92 @@
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+class ASF_Simple_Index_Object;
+
+
+class IndexEntry{
+  long PacketNumber;
+  long PacketCount;
+
+  ObserverInterface _observer;
+
+  IndexEntry(EntryFileClass ef, ObserverInterface theObserver){
+    _observer = theObserver;
+    if(ef.GetPos() + 6 < ef.GetSize())
+    {
+      PacketNumber = ef.ReadBinaryInt(4, false);
+      PacketCount = ef.ReadBinaryInt(2, false);
+    }
+    else
+    {
+      PacketNumber = -666;
+      PacketCount = -666;
+    }
+  }
+}
+
+
+typedef IndexEntry[] IndexEntryArray;
+class ASF_Simple_Index_Object{
+  ulong  ObjectId1;
+  ulong  ObjectId2;
+  long   ObjectSize;
+  ulong  FileId1;
+  ulong  FileId2;
+  long   IndexEntryTimeInterval;
+  long   MaximumPacketCount;
+  long   IndexEntriesCount;
+  IndexEntryArray IndexEntries;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  ASF_Simple_Index_Object(const String &thePluginName, ObserverInterface theObserver){
+    _pluginName = thePluginName;
+    _observer = theObserver;
+    IndexEntries = new IndexEntryArray();
+  }
+
+  void Read(EntryFileClass ef, const long &offset){
+    ef.Seek(offset);
+
+    ObjectId1 = ef.ReadBinaryInt(8, true);
+    ObjectId2 = ef.ReadBinaryInt(8, true);
+    ObjectSize = ef.ReadBinaryInt(8, false);
+
+    if(offset + ObjectSize <= ef.GetSize()){
+      FileId1 = ef.ReadBinaryInt(8, true);
+      FileId2 = ef.ReadBinaryInt(8, true);
+      IndexEntryTimeInterval = ef.ReadBinaryInt(8, false);
+      MaximumPacketCount = ef.ReadBinaryInt(4, false);
+      IndexEntriesCount = ef.ReadBinaryInt(4, false);
+
+      _observer.WriteDebug(_pluginName, "  ASF_Simple_Index_Object", false);
+      _observer.WriteDebug(_pluginName, "  =======================", false);
+      _observer.WriteDebug(_pluginName, "    Offset: " + offset, false);
+      _observer.WriteDebug(_pluginName, "    Object Size: " + ObjectSize, false);
+      _observer.WriteDebug(_pluginName, "    Index Entry Time Interval: " + IndexEntryTimeInterval, false);
+      _observer.WriteDebug(_pluginName, "    Maximum Packet Count: " + MaximumPacketCount, false);
+      _observer.WriteDebug(_pluginName, "    Index Entries Count: " + IndexEntriesCount, false);
+
+      for(int i = 0; i < IndexEntriesCount; i++){
+        IndexEntry ie(ef, _observer);
+        if(ie.PacketCount != -666) IndexEntries.Add(ie);
+
+/*
+        if(Debug) {
+          _observer.WriteDebug(_pluginName, "      Index Entry(" + i + ")");
+          _observer.WriteDebug(_pluginName, "        Packet Number: " + ie.PacketNumber);
+          _observer.WriteDebug(_pluginName, "        Packet Count: " + ie.PacketCount);
+        }
+*/
+      }
+
+      _observer.WriteDebug(_pluginName, "", false);
+    }
+    else {
+      _observer.WriteDebug(_pluginName, "Not enough data to read the contents of this object.", false);
+    }
+
+    ef.Seek(offset + ObjectSize);
+  }
+}

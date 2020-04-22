@@ -1,0 +1,81 @@
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+class ASF_File_Properties_Object{
+
+  // Header Object values
+  ulong  ObjectId1;
+  ulong  ObjectId2;
+  long   ObjectSize;
+  ulong  FileId1;
+  ulong  FileId2;
+  long   FileSize;
+  DateClass   CreationDate;
+  long   DataPacketsCount;
+  long   PlayDuration;
+  long   SendDuration;
+  long   Preroll;
+  long   Flags;
+  bool   BroadcastFlag;
+  bool   SeekableFlag;
+  long   MinimumDataPacketSize;
+  long   MaximumDataPacketSize;
+  long   MaximumBitrate;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+
+
+  ASF_File_Properties_Object(const String &thePluginName, ObserverInterface theObserver){
+    _pluginName = thePluginName;
+    _observer = theObserver;
+  }
+
+  void Read(EntryFileClass ef, const long &offset){
+    ef.Seek(offset);
+
+    ObjectId1 = ef.ReadBinaryInt(8, true);
+    ObjectId2 = ef.ReadBinaryInt(8, true);
+    ObjectSize = ef.ReadBinaryInt(8, false);
+
+    if(offset + ObjectSize < ef.GetSize()){
+      FileId1 = ef.ReadBinaryInt(8, true);
+      FileId2 = ef.ReadBinaryInt(8, true);
+      FileSize = ef.ReadBinaryInt(8, false);
+      ef.ReadWinDate(CreationDate);  //CreationDate = ef.ReadBinaryInt(8, false);
+      DataPacketsCount = ef.ReadBinaryInt(8, false);
+      PlayDuration = ef.ReadBinaryInt(8, false);
+      SendDuration = ef.ReadBinaryInt(8, false);
+      Preroll = ef.ReadBinaryInt(8, false);
+      Flags = ef.ReadBinaryInt(4, false);
+      MinimumDataPacketSize = ef.ReadBinaryInt(4, false);
+      MaximumDataPacketSize = ef.ReadBinaryInt(4, false);
+      MaximumBitrate = ef.ReadBinaryInt(4, false);
+
+      if(Flags & 0x1)
+        BroadcastFlag = true;
+      if(Flags & 0x2)
+        SeekableFlag = true;
+
+      // right now, don't care about the reserved value
+
+      _observer.WriteDebug(_pluginName, "    ASF_File_Properties_Object", false);
+      _observer.WriteDebug(_pluginName, "    ==========================", false);
+      _observer.WriteDebug(_pluginName, "      Offset: " + offset, false);
+      _observer.WriteDebug(_pluginName, "      Object Size: " + ObjectSize, false);
+      _observer.WriteDebug(_pluginName, "      File Size: " + FileSize, false);
+      _observer.WriteDebug(_pluginName, "      Creation Date: " + CreationDate.GetString("dd-MMM-yyyy", "HH:mm:ss", 0), false);
+      _observer.WriteDebug(_pluginName, "      Data Packets Count: " + DataPacketsCount, false);
+      _observer.WriteDebug(_pluginName, "      Play Duration: " + PlayDuration + " milliseconds", false);
+      _observer.WriteDebug(_pluginName, "      Send Duration: " + SendDuration + " milliseconds", false);
+      _observer.WriteDebug(_pluginName, "      Minimum Data Packet Size: " + MinimumDataPacketSize, false);
+      _observer.WriteDebug(_pluginName, "      Maximum Data Packet Size: " + MaximumDataPacketSize, false);
+      _observer.WriteDebug(_pluginName, "", false);
+    }
+    else {
+      _observer.WriteDebug(_pluginName, "Not enough data to read the contents of this object.", false);
+    }
+
+    ef.Seek(offset + ObjectSize);
+  }
+}

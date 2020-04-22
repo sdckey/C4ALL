@@ -1,0 +1,253 @@
+/*
+  This is where, currently, all plugins are coded into the main script.
+  To add a new Plugin, follow these steps:
+
+  1.  add an "include" statement  include "Plugins\ExtPlugin"
+  2.  create an instance name -   ExtPlugin extPlugin;
+  3.  Instantiate the plugin:     extPlugin = new ExtPlugin();
+  4.  Add it to the plugin list:  new MyPlugins(myPlugins, extPlugin);
+
+*/
+
+include "Core Files\\Controllers\ConsoleController"
+include "Core Files\\PluginList"
+include "Plugins\\3GPPlugin"
+include "Plugins\\ArtPlugin"
+include "Plugins\\AviPlugin"
+include "Plugins\\BmpPlugin"
+include "Plugins\\DngPlugin"
+include "Plugins\\Dng2Plugin"
+include "Plugins\\EmfPlugin"
+include "Plugins\\FlvPlugin"
+include "Plugins\\GifPlugin"
+include "Plugins\\Gif64Plugin"
+include "Plugins\\Jp2Plugin"
+include "Plugins\\JpgPlugin"
+include "Plugins\\Jpg64Plugin"
+include "Plugins\\Mj2Plugin"
+include "Plugins\\MovPlugin"
+include "Plugins\\MpgPlugin"
+include "Plugins\\PngPlugin"
+include "Plugins\\PsdPlugin"
+include "Plugins\\TiffPlugin"
+include "Plugins\\Tiff2Plugin"
+include "Plugins\\WavPlugin"
+include "Plugins\\WmfPlugin"
+include "Plugins\\WmfRtfPlugin"
+include "Plugins\\WmvPlugin"
+
+
+class ActivePlugins{
+
+  PluginList  myPlugins;
+
+  3GPPlugin   gpPlugin;
+  ArtPlugin   artPlugin;
+  AviPlugin   aviPlugin;
+  BmpPlugin   bmpPlugin;
+  DngPlugin   dngPlugin;
+  Dng2Plugin  dng2Plugin;
+  EmfPlugin   emfPlugin;
+  FlvPlugin   flvPlugin;
+  GifPlugin   gifPlugin;
+  Gif64Plugin gif64Plugin;
+  Jp2Plugin   jp2Plugin;
+  JpgPlugin   jpgPlugin;
+  Jpg64Plugin jpg64Plugin;
+  Mj2Plugin   mj2Plugin;
+  MovPlugin   movPlugin;
+  MpgPlugin   mpgPlugin;
+  PngPlugin   pngPlugin;
+  PsdPlugin   psdPlugin;
+  TiffPlugin  tifPlugin;
+  Tiff2Plugin tif2Plugin;
+  WavPlugin   wavPlugin;
+  WmfPlugin   wmfPlugin;
+  WmfRtfPlugin wmf2Plugin;
+  WmvPlugin   wmvPlugin;
+
+  CaseClass   _case;
+
+  ConsoleController MyConsole;
+  SearchClass Search;
+
+
+  ActivePlugins(CaseClass c, ConsoleController myConsole):
+    MyConsole = myConsole,
+    _case = c
+  {
+    myPlugins = new PluginList();
+
+
+    // Picture Plugins
+    artPlugin = new ArtPlugin();
+    new PluginList(myPlugins, artPlugin);
+
+    bmpPlugin = new BmpPlugin();
+    new PluginList(myPlugins, bmpPlugin);
+
+    dngPlugin = new DngPlugin();
+    new PluginList(myPlugins, dngPlugin);
+
+    dng2Plugin = new Dng2Plugin();
+    new PluginList(myPlugins, dng2Plugin);
+
+    emfPlugin = new EmfPlugin();
+    new PluginList(myPlugins, emfPlugin);
+
+    gifPlugin = new GifPlugin();
+    new PluginList(myPlugins, gifPlugin);
+
+    gif64Plugin = new Gif64Plugin();
+    new PluginList(myPlugins, gif64Plugin);
+
+    jp2Plugin = new Jp2Plugin();
+    new PluginList(myPlugins, jp2Plugin);
+
+    jpgPlugin = new JpgPlugin();
+    new PluginList(myPlugins, jpgPlugin);
+
+    jpg64Plugin = new Jpg64Plugin();
+    new PluginList(myPlugins, jpg64Plugin);
+
+    pngPlugin = new PngPlugin();
+    new PluginList(myPlugins, pngPlugin);
+
+    psdPlugin = new PsdPlugin();
+    new PluginList(myPlugins, psdPlugin);
+
+    tifPlugin = new TiffPlugin();
+    new PluginList(myPlugins, tifPlugin);
+
+    tif2Plugin = new Tiff2Plugin();
+    new PluginList(myPlugins, tif2Plugin);
+
+    wmfPlugin = new WmfPlugin();
+    new PluginList(myPlugins, wmfPlugin);
+
+    wmf2Plugin = new WmfRtfPlugin();
+    new PluginList(myPlugins, wmf2Plugin);
+
+
+    // Movie Plugins
+    gpPlugin = new 3GPPlugin();
+    new PluginList(myPlugins, gpPlugin);
+
+    aviPlugin = new AviPlugin();
+    new PluginList(myPlugins, aviPlugin);
+
+    flvPlugin = new FlvPlugin();
+    new PluginList(myPlugins, flvPlugin);
+
+    mj2Plugin = new Mj2Plugin();
+    new PluginList(myPlugins, mj2Plugin);
+
+    movPlugin = new MovPlugin();
+    new PluginList(myPlugins, movPlugin);
+
+    mpgPlugin = new MpgPlugin();
+    new PluginList(myPlugins, mpgPlugin);
+
+    wavPlugin = new WavPlugin();
+    new PluginList(myPlugins, wavPlugin);
+
+    wmvPlugin = new WmvPlugin();
+    new PluginList(myPlugins, wmvPlugin);
+
+  }
+
+  long GetSelected(){
+    long count;
+    foreach(PluginList p in myPlugins){
+      if(p.Plugin.Enabled())
+        count++;
+    }
+    return count;
+  }
+
+  String GetSelectedAsText()
+  {
+    int picCount;
+    int picTotal;
+
+    int movCount;
+    int movTotal;
+
+    foreach(PluginList p in myPlugins){
+
+      bool isPic, isMov;
+      foreach(SymbolClass::InheritClass ic in p.Plugin.DynamicType().InheritList())
+      {
+        if(ic.Type().Name() == "PicturePluginInterface")
+          { isPic = true; break; }
+        else if(ic.Type().Name() == "MoviePluginInterface")
+          { isMov = true; break; }
+      }
+
+      if(isPic)
+        { picTotal++; if(p.Plugin.Enabled()) picCount++; }
+      else if (isMov)
+        { movTotal++; if(p.Plugin.Enabled()) movCount++; }
+    }
+    return picCount + " / " + picTotal + " Picture Types, " + movCount + " / " + movTotal + " Movie Types";
+  }
+
+  SearchClass GetSearch(){
+    if(!Search){
+      Search = new SearchClass();
+
+      // Build the Search class with the selected file headers and update the plugins
+      // so they know what index they are in the search object
+      int indexNumber;
+      foreach(PluginList p in myPlugins){
+        if(p.Plugin.Enabled()){
+          if (!Search.AddKeyword(p.Plugin.Header(), KeywordClass::ANSI | KeywordClass::GREP | KeywordClass::CASE)){
+
+            bool shouldReportError = true;
+            foreach(SymbolClass::InheritClass ic in p.Plugin.DynamicType().InheritList()){
+              if(ic.Type().Name() == "IndexPluginInterface")
+                shouldReportError = false;
+            }
+
+            if(shouldReportError)
+              MyConsole.WriteFullLine("Failed To Add " + p.Plugin.Extension() + " Keyword");
+          }
+          else{
+            MyConsole.WriteFullLine("Searching for " + p.Plugin.Extension() + "s..." + p.Plugin.Header());
+            p.Plugin.SetHeaderIndex(indexNumber);
+            indexNumber++;
+          }
+        }
+      }
+    }
+    return Search;
+  }
+
+  PluginInterface GetPlugin(const String &pName){
+    PluginInterface pi;
+
+    foreach(PluginList p in myPlugins){
+      if(p.Plugin.PluginName() == pName){
+        pi = p.Plugin;
+        break;
+      }
+    }
+
+    return pi;
+  }
+
+
+
+  PluginInterface GetSearchHit(int index){
+    PluginInterface pi;
+
+    foreach(PluginList p in myPlugins){
+      if(p.Plugin.HeaderIndex() == index){
+        pi = p.Plugin;
+        break;
+      }
+    }
+
+    return pi;
+  }
+}

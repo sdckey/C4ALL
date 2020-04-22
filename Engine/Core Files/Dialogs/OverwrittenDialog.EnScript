@@ -1,0 +1,29 @@
+class OverwrittenDialog: DialogClass{
+
+String _txtFolder;
+String _txtName;
+
+  GroupBoxClass    grpMain;
+  PathEditClass    txtFolder;
+  StringEditClass  txtName;
+  GroupBoxClass    grpAbout;
+  StaticTextClass  lblAbout;
+
+  OverwrittenDialog(DialogClass parent, const String &defPath, const String &defName):
+    DialogClass(parent, "dlgMain"),
+
+    grpMain(this, "Export Settings:",   12,   6, 243, 72, 0),
+    txtFolder(this, "Create LEF here:", 22,  24, 223, 12, 0, _txtFolder, 512, WindowClass::FILECREATE),
+    txtName  (this, "LEF name:",        22,  50, 208, 12, 0, _txtName, 512, 0),
+    grpAbout(this, "About this Script", 12,  80, 244, 72, 0),
+    lblAbout(this, "This script will target any Overwritten files in your case.\n" +
+                   "Copies of the Overwritten data will be placed into a Logical Evidence File (specified above).  " +
+                   "Each cluster of the Overwritten files will be examined - Only clusters that HAVEN'T been " +
+                   "overwritten will be copies out to the LEF.",
+                                        21,  98, 223, 45, 0)
+  {
+    _txtFolder = defPath;
+    _txtName = defName + "_overwritten.L01";
+
+  }
+}

@@ -1,0 +1,161 @@
+/*
+  This is where all options for the main script are stored.
+  An instance of this class is passed around to all of the
+  Dialog boxes to gather the required data.
+  It is then used for the subsequent execution.
+*/
+
+#ifdef VERSION_6
+typedef EntryClass[] EntryArray;
+#endif
+
+
+typedef String[] StringArray;
+
+class OptionsClass {
+
+  CaseClass   Case;
+
+  // Variables I have used in 2.0
+  int         TriageSearchType;      // 0 = Allocated Files; 1 = Unallocated;      2 = Both
+  int         SearchSelected;        // 0 = Selected Files;  1 = Exclude Selected; 2 = Ignore
+  int         TriageNextAction;      // 0 = Live Allocated;  1 = Allocated;        2 = Unallocated; 3 = Everywhere;  4 = nothing
+  int         TriageValidateAction;  // 0 = Live Allocated;  1 = Embedded;         2 = Allocated;   3 = Unallocated; 4 = Everywhere
+  String      ReportPath;
+  String      SqlitePath;
+  String      CaseName;
+
+  bool        BookmarkExcludedPreCat;
+  bool        CopyProtected;
+  bool        Debug;
+  bool        DebugCurrentOnly;
+  bool        ExcludeUnallocated;
+  bool        SaveConsole;
+  bool        CreateLef;
+
+  LogicalEvidenceFileClass Lef;
+
+#ifdef VERSION_8
+  bool        ExcludeTagged;
+#endif
+
+  bool        ExportByHash;
+  bool        IgnoreFailedExtract;
+  bool        MakeBookmarks;
+  bool        MakeLibrary;
+  bool        SearchSlack;
+  bool        IgnoreSmall;
+
+#ifdef VERSION_6
+  EntryArray  SelectedEntries;
+#else
+  ItemIteratorClass MyIter;
+#endif
+
+  int         DbType;
+  int         ExcludePreCatVal;
+  int         VersionMajor;
+  int         VersionMinor;
+  int         VersionSubMajor;
+  int         VersionSubMinor;
+
+  long        EntryCount;
+  long        VictimCount;
+  long        ZipCount;
+
+  String      Comments;
+  String      CompileDate;
+  String      DbName;
+  String      DbPath;
+  String      ForensicAnalyst;
+  String      LibraryPath;
+  String      LoginName;
+  String      ODBCstring;
+  String      Password;
+  String      ProtectedPath;
+  String      ScriptName;
+  String      ServerName;
+  String      StartDate;
+  String      StartTime;
+  String      VersionNum;
+
+#ifdef VERSION_8
+  StringArray SelectedTags;
+#endif
+
+
+  OptionsClass()
+  {
+    BookmarkExcludedPreCat = false;
+    CopyProtected = true;
+    Debug = false;
+    DebugCurrentOnly = false;
+    ExportByHash = false;
+    IgnoreFailedExtract = false;
+    MakeBookmarks = false;
+    MakeLibrary = false;
+    SearchSlack = false;
+    SaveConsole = false;
+
+    DbType = 0;
+    SearchSelected = false;
+    ExcludePreCatVal = 0;
+
+    DbName = "Strategy_Hash";
+    DbPath = "";
+    LibraryPath = "";
+    ODBCstring = "";
+
+    LoginName = "c4p_user";
+    Password = "password";
+#ifdef VERSION_8
+    SelectedTags = new StringArray;
+    MyIter = new ItemIteratorClass(Case, ItemIteratorClass::NOPROXY | ItemIteratorClass::NORECURSE, ItemIteratorClass::ALL);
+#endif
+  }
+
+  ~OptionsClass()
+  {
+    if(Lef) Lef.Close();
+  }
+
+  void SetCase(CaseClass c){
+    Case = c;
+
+#ifdef VERSION_6
+    SelectedEntries = new EntryArray(0, c.EntryRoot().CountAll(NodeClass::SELECTED, NodeClass::COUNTNODES | NodeClass::COUNTFOLDERS | NodeClass::COUNTRECURSIVE));
+    forall(EntryClass e in c.EntryRoot()){
+      if(e.IsSelected())
+        SelectedEntries.Add(e);
+    }
+#endif
+  }
+
+  // ## Status Bar Operations
+  String _statusText;
+  String _previousStatusText;
+  void SetStatusMessage(const String &val){
+    _previousStatusText = _statusText;
+    _statusText = val;
+    SystemClass::StatusMessage(val);
+  }
+
+  void RestoreStatusMessage(){
+    _statusText = _previousStatusText;
+    SystemClass::StatusMessage(_previousStatusText);
+  }
+
+  void StatusRange(const String &msg, long size){
+    _previousStatusText = msg;
+    SystemClass::StatusRange(msg, size);
+  }
+
+  void AppendStatusMessage(const String &val){
+    SystemClass::StatusMessage(_previousStatusText + ".  " + val);
+  }
+
+  void AppendStatusRange(const String &msg, long size){
+    SystemClass::StatusRange(_previousStatusText + ".  " + msg, size);
+  }
+  // ##
+}

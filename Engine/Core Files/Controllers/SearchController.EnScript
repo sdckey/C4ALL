@@ -1,0 +1,372 @@
+include "..\\..\\ActivePlugins"
+include "..\\Models\\B64DecoderClass"
+include "..\\..\\Classes\\OptionsClass"
+
+include "PictureOutputController"
+include "MovieOutputController"
+include "ConsoleController"
+
+
+class SearchController {
+
+#ifdef VERSION_6
+  BookmarkFolderClass   SmallFilesRoot;
+#else
+  BookmarkClass         SmallFilesRoot;
+#endif
+
+  ActivePlugins       MyPlugins;
+  OptionsClass        MyOptions;
+  ConsoleController   MyConsole;
+  SearchClass         Search;
+  int                 HitLength;
+
+  PictureOutputController  MyPictureOutput;
+  MovieOutputController    MyMovieOutput;
+
+  SearchController(ActivePlugins myPlugins, OptionsClass myOptions,
+                        PictureOutputController myPictureOutput,
+                        MovieOutputController myMovieOutput,
+                        ConsoleController myConsole):
+    MyPlugins = myPlugins,
+    MyOptions = myOptions,
+    MyPictureOutput = myPictureOutput,
+    MyMovieOutput = myMovieOutput,
+    MyConsole = myConsole
+  {
+    Search = new SearchClass();
+    //MyConsole = new ConsoleController(MyOptions);
+
+    if(MyPlugins) BuildSearch();
+  }
+
+  void BuildSearch(){
+    // have the plugin list build its own header set to use for searching
+    Search = MyPlugins.GetSearch();
+
+    if (!Search.Create())
+      MyConsole.WriteFullLine("Failed To Create SearchClass");
+    else
+      MyConsole.WriteFullLine("SearchClass created.");
+  }
+
+  String GetPluginName(SearchClass::HitClass h)
+  {
+    PluginInterface pluginHit = MyPlugins.GetSearchHit(h.KeywordIndex());
+    return pluginHit.PluginName();
+  }
+
+  void InitializeSmallFilesBookmark()
+  {
+#ifdef VERSION_6
+    SmallFilesRoot = new BookmarkFolderClass(null, "");
+    SmallFilesRoot = new BookmarkFolderClass(SmallFilesRoot, "C4All Files Ignored as Small");
+#else
+    SmallFilesRoot = new BookmarkClass(MyOptions.Case.BookmarkRoot(), "C4All Files Ignored as Small", NodeClass::FOLDER);
+#endif
+  }
+
+  void HandleSmallFile(EntryClass entry, long offset, long carveSize)
+  {
+    // First time we need to set up the small files bookmark folder
+    if(!SmallFilesRoot)
+      InitializeSmallFilesBookmark();
+
+#ifdef VERSION_6
+    SmallFilesRoot.AddBookmark(entry, offset, carveSize, "Offset " + offset, BookmarkClass::SHOWPICTURE, BookmarkClass::PICTURE);
+#else
+    BookmarkImageClass data(SmallFilesRoot, entry.Name());
+    data.CopyItemData(entry);
+    data.SetDataSize(carveSize);
+    data.SetDataOffset(offset);
+    data.SetComment("Offset " + offset);
+#endif
+  }
+
+
+  long CheckHit(EntryClass entry, PluginInterface pluginHit, long offset, const String &path){
+    long carveSize = -1;
+
+    // Identify what plugin is referenced by the search class
+    if(pluginHit){
+
+      int fileType;
+
+      foreach(SymbolClass::InheritClass ic in pluginHit.DynamicType().InheritList()){
+        if(ic.Type().Name() == "PicturePluginInterface")
+          fileType = 1;
+        else if(ic.Type().Name() == "MoviePluginInterface")
+          fileType = 0;
+        else if(ic.Type().Name() == "IndexPluginInterface")
+          fileType = 2;
+      }
+
+      if(MyOptions.Debug){
+        if(fileType == 1)
+          MyPictureOutput.WriteDebug("SearchController", "Header Type:  " + pluginHit.Extension());
+        else if(fileType == 0)
+          MyMovieOutput.WriteDebug("SearchController", "Header Type:  " + pluginHit.Extension());
+      }
+
+      // some file formats have a set of bytes that need to be carved out BEFORE the header starts
+      // for obvious reasons, don't allow search hits that would have the actual file start before the Entry begins
+      if(offset - pluginHit.BytesPrecedingHeader() >= 0){
+        HitLength = pluginHit.Header().GetLength();
+
+        // Have the plugin work its magic and determine if there is anything to carve out
+        carveSize = pluginHit.Validate(entry, offset);
+
+        if(carveSize > 0){
+
+          // Rule:  if it's a Movie file and the File Offset is ZERO, take the Logical Size
+          if ( (offset == 0 || offset == pluginHit.BytesPrecedingHeader() ) && fileType == 0 )
+             carveSize = entry.LogicalSize();
+
+          if(fileType == 1) {
+            PicturePluginInterface ppi = PicturePluginInterface::TypeCast(pluginHit);
+            PictureCarveClass foundFile;
+
+            // Rule:  is the carve size less than the plugin's specified "SmallSize" value
+            bool goodToGo = true;
+            if(MyOptions.IgnoreSmall)
+            {
+              if(carveSize < ppi.SmallFileLimit())
+              {
+                String msg = "-- file was validated but size (" + carveSize + ") qualifies as 'Small' (" + ppi.SmallFileLimit() + ").  " + ppi.PluginName() + ", at offset " + offset;
+                if(MyOptions.Debug) MyPictureOutput.WriteDebug("SearchController", msg);
+                //MyConsole.WriteFullLine(msg);
+                goodToGo = false;
+
+                HandleSmallFile(entry, offset, carveSize);
+              }
+            }
+
+            if(goodToGo)
+            {
+              if(ppi.GetMemoryFileClass())
+                foundFile = new PictureCarveClass(ppi.GetMemoryFileClass(), entry, ppi.AspectRatio(), ppi.BitDepth(), carveSize, offset - pluginHit.BytesPrecedingHeader(), pluginHit.Extension(), ppi.MetaData());
+              else
+                foundFile = new PictureCarveClass(entry, ppi.AspectRatio(), ppi.BitDepth(), carveSize, offset - pluginHit.BytesPrecedingHeader(), pluginHit.Extension(), ppi.MetaData());
+
+              HitLength = foundFile.FileLength;
+              MyPictureOutput.CarveFile(foundFile, path);
+              if(foundFile.MF) foundFile.MF.Close();
+            }
+            else
+            {
+              MyPictureOutput.ExcludedSmallCount++;
+            }
+          }
+          else if(fileType == 0) {
+            MoviePluginInterface mpi = MoviePluginInterface::TypeCast(pluginHit);
+
+            // Rule:  is the carve size less than the plugin's specified "SmallSize" value
+            bool goodToGo = true;
+            if(MyOptions.IgnoreSmall)
+            {
+              if(carveSize < mpi.SmallFileLimit())
+              {
+                String msg = "-- file was validated but size (" + carveSize + ") qualifies as 'Small' (" + mpi.SmallFileLimit() + ").  " + mpi.PluginName() + ", at offset " + offset;
+                if(MyOptions.Debug) MyMovieOutput.WriteDebug("SearchController", msg);
+                //MyConsole.WriteFullLine(msg);
+                goodToGo = false;
+
+                HandleSmallFile(entry, offset, carveSize);
+              }
+            }
+
+            if(goodToGo)
+            {
+              MovieCarveClass foundFile(entry, carveSize, offset - pluginHit.BytesPrecedingHeader(), mpi.Extension(), mpi.MetaData(), mpi.MovieLength());
+              HitLength = foundFile.FileLength;
+              MyMovieOutput.CarveFile(foundFile, path);
+            }
+            else
+            {
+              MyMovieOutput.ExcludedSmallCount++;
+            }
+          }
+
+          // new plugin interface has a variable to identify what range of data to ignore.
+          if(pluginHit.RangeToIgnoreSearchHits() > 0)
+            carveSize = pluginHit.RangeToIgnoreSearchHits();
+          if(carveSize == 0)
+            carveSize = pluginHit.Header().GetLength();
+          if(carveSize >= 0)
+            return carveSize;
+          else
+            // Some of the plugins may return negative numbers, which means that the data needs to be SKIPPED but not extracted
+            // So return the value here
+            return -carveSize;
+        }
+      }
+      else {
+        if(MyOptions.Debug){
+          if(fileType == 1)
+            MyPictureOutput.WriteDebug("SearchController", "Search Hit (" + offset + ") - BytesProceedingHeader(" + pluginHit.BytesPrecedingHeader() + ") value would put hit PRIOR to the the start of the Entry:  " + pluginHit.Extension());
+          else if (fileType == 0)
+            MyMovieOutput.WriteDebug("SearchController", "Search Hit (" + offset + ") - BytesProceedingHeader(" + pluginHit.BytesPrecedingHeader() + ") value would put hit PRIOR to the the start of the Entry:  " + pluginHit.Extension());
+
+        }
+
+        return 0;
+      }
+    }
+    else
+      return 0;
+
+    return 0;
+  }
+
+
+
+  /*
+    ***************************************************************************************************************
+    Search_Base is the end point, accessed by SearchEntry or SearchMf
+    ***************************************************************************************************************
+  */
+  void Search_Base(EntryClass entry, FileClass fc, long startingAt, const String &path){
+    long    entryLength,
+            hitCount,
+            searchLength,
+            searchStart;
+    String  hitExt;
+
+    entryLength = entry.PhysicalSize();
+    searchLength = 500000000;
+    searchStart = startingAt;
+//searchStart = 52297614;
+
+    if(entry.LogicalSize() > entry.PhysicalSize())
+      entryLength = entry.LogicalSize();
+
+    String msg;
+#ifdef VERSION_6
+    msg = "Searching:  " +
+           path + entry.FullPath() + " [offset: " +
+           searchStart + "; PL: " + String::FormatInt(entry.PhysicalLocation(), int::DECIMAL, 1) + "]";
+#else
+  msg = "Searching:  " +
+           path + entry.TruePath() + " [offset: " +
+           searchStart + "; PL: " + String::FormatInt(entry.PhysicalLocation(), int::DECIMAL, 1) + "]";
+#endif
+
+    MyConsole.WritePartLine(msg);
+
+    if(MyOptions.Debug){
+      MyPictureOutput.WriteDebug("SearchController", "");
+      MyPictureOutput.WriteDebug("SearchController", msg);
+
+      MyMovieOutput.WriteDebug("SearchController", "");
+      MyMovieOutput.WriteDebug("SearchController", msg);
+    }
+
+    MyOptions.EntryCount++;
+
+    if(searchStart >= entryLength)
+      MyConsole.WriteEndLine("");
+
+    // This loop will cycle for every 500MB of data in the supplied Entry
+    while(searchStart < entryLength){
+
+      // If the previous search hit took us beyond the 500MB demarker, then don't skip BACK
+      if(fc.GetPos() <= searchStart)
+        fc.Seek(searchStart);
+
+      if(fc.GetPos() + searchLength > entryLength)
+        searchLength = entryLength - searchStart;
+
+      if(fc.GetPos() < entryLength && searchStart != 0)
+        MyConsole.WritePartLine("SEARCH: " + searchStart + " of " + entryLength + " (" + entry.Name() + ")");
+
+      if(MyPictureOutput && MyMovieOutput)
+        MyOptions.StatusRange("Found " + MyPictureOutput.FileCount + " pics, " + MyMovieOutput.FileCount + " movs.  Searching for headers", searchLength);
+      else if(MyPictureOutput)
+        MyOptions.StatusRange("Found " + MyPictureOutput.FileCount + " pics.  Searching for headers", searchLength);
+      else if(MyMovieOutput)
+        MyOptions.StatusRange("Found " + MyMovieOutput.FileCount + " movs.  Searching for headers", searchLength);
+
+      hitCount = Search.Find(fc, searchLength, -1, SearchClass::STATUSUPDATE);
+      SearchClass::HitArrayClass hits = Search.GetHits();
+      MyConsole.WriteEndLine("..." + hitCount + " hits");
+
+      if(MyOptions.Debug) {
+        MyPictureOutput.WriteDebug("SearchController", "Header Search yielded " + hitCount + " potential files");
+        MyMovieOutput.WriteDebug("SearchController", "Header Search yielded " + hitCount + " potential files");
+      }
+
+      fc.Seek(searchStart);
+
+      long count;
+      forall(SearchClass::HitClass h in hits){
+        count++;
+
+        String msg;
+        if(MyPictureOutput && MyMovieOutput)
+          msg = "Found " + MyPictureOutput.FileCount + " pics, " + MyMovieOutput.FileCount + " movs. hit " + count + "/" + hitCount;
+        else if(MyPictureOutput)
+          msg = "Found " + MyPictureOutput.FileCount + ". hit " + count + "/" + hitCount;
+        else if(MyMovieOutput)
+          msg = "Found " + MyMovieOutput.FileCount + " movs. hit " + count + "/" + hitCount;
+
+        MyOptions.StatusRange(msg, searchLength);
+
+        if(h.Offset() >= fc.GetPos()){
+          fc.Seek(h.Offset());
+
+          if(MyOptions.Debug){
+            if(MyMovieOutput) MyMovieOutput.WriteDebug("SearchController", "Search Hit " + count + "/" + hitCount + ", OFF: " + fc.GetPos());
+            if(MyPictureOutput) MyPictureOutput.WriteDebug("SearchController", "Search Hit " + count + "/" + hitCount + ", OFF: " + fc.GetPos());
+          }
+
+          // Call another function, which will analyse the hit and decide what format to validate with
+
+          PluginInterface pi = MyPlugins.GetSearchHit(h.KeywordIndex());
+
+          long skipLength = CheckHit(entry, pi, h.Offset(), path);
+          fc.Skip(skipLength);
+        } else {
+          /* takes up a lot of time in the debug mode to write this info out.
+          if(MyOptions.Debug) {
+            MyMovieOutput.WriteDebug("SearchController", "Search Hit falls within previously extracted data");
+            MyPictureOutput.WriteDebug("SearchController", "Search Hit falls within previously extracted data");
+          }
+          */
+        }
+
+      }
+
+      // Prepare for the next 500 MB chunk
+      searchStart = searchStart + searchLength;
+    }
+  }
+
+  // MemoryFileClass would be creatd to handle Overwritten Files
+  void SearchMf(EntryClass entry, MemoryFileClass mf, long startingAt, const String &path){
+    Search_Base(entry, mf, startingAt, path);
+  }
+
+  // Standard Entry Point for searching data
+  void SearchEntry(EntryClass entry, long startingAt, const String &path){
+
+    EntryFileClass ef();
+
+    #ifdef VERSION_6
+      ef.Open(entry, FileClass::SLACK);
+    #else
+      ef.Open(entry, FileClass::SLACK | FileClass::NOINITIALIZE);
+    #endif
+
+    if(ef){
+      Search_Base(entry, ef, startingAt, path);
+    }
+    else
+      MyConsole.WriteFullLine("Could not open entry: " + path + entry.FullPath());
+  }
+  /*
+    ***************************************************************************************************************
+    ***************************************************************************************************************
+  */
+}
+
+

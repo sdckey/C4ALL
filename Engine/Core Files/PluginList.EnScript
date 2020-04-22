@@ -1,0 +1,17 @@
+/*
+  This is a simple class that will hold an array of Plugins.
+*/
+
+include "Interfaces\\PluginInterface"
+
+class PluginList: NameListClass{
+
+  PluginInterface Plugin;
+
+  PluginList(PluginList parent = null, PluginInterface plugin = null):
+    NameListClass(parent, ""),
+    Plugin = plugin
+  {
+  }
+
+}

@@ -1,0 +1,123 @@
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+class ASF_Stream_Properties_Object {
+
+  ulong  ObjectId1;
+  ulong  ObjectId2;
+  long   ObjectSize;
+  ulong  StreamType1;
+  ulong  StreamType2;
+  ulong  ErrorCorrectionType1;
+  ulong  ErrorCorrectionType2;
+  long   TimeOffset;
+  long   TypeSpecificDataLength;
+  long   ErrorCorrectionDataLength;
+  int    Flags1;
+  int    Flags2;
+  int    StreamNumber;
+  int    Flags_Reserved;
+  bool   EncryptedContentFlag;
+  long   Reserved;
+  //ong  TypeSpecificData;
+  //ong  ErrorCorrectionData;
+
+  bool   HasVideo;
+  bool   HasAudio;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  ASF_Stream_Properties_Object(const String &thePluginName, ObserverInterface theObserver){
+    _pluginName = thePluginName;
+    _observer = theObserver;
+
+    ASF_Audio_Media1 = 0x409E69F84D5BCF11;
+    ASF_Video_Media1 = 0xC0EF19BC4D5BCF11;
+
+  }
+
+  void Read(EntryFileClass ef, const long &offset){
+    ef.Seek(offset);
+
+    ObjectId1 = ef.ReadBinaryInt(8, true);
+    ObjectId2 = ef.ReadBinaryInt(8, true);
+    ObjectSize = ef.ReadBinaryInt(8, false);
+
+    if(offset + ObjectSize < ef.GetSize()){
+      StreamType1 = ef.ReadBinaryInt(8, true);
+      StreamType2 = ef.ReadBinaryInt(8, true);
+
+      if(StreamType1 == ASF_Audio_Media1)
+        HasAudio = true;
+      if(StreamType1 == ASF_Video_Media1)
+        HasVideo = true;
+
+
+      ErrorCorrectionType1 = ef.ReadBinaryInt(8, true);
+      ErrorCorrectionType2 = ef.ReadBinaryInt(8, true);
+      TimeOffset = ef.ReadBinaryInt(8, false);
+      TypeSpecificDataLength = ef.ReadBinaryInt(4, false);
+      ErrorCorrectionDataLength = ef.ReadBinaryInt(4, false);
+      Flags1 = ef.ReadBinaryInt(1, false);
+      Flags2 = ef.ReadBinaryInt(1, false);
+      Reserved = ef.ReadBinaryInt(4, true);
+
+      // skip the last two fields
+      ef.Skip(TypeSpecificDataLength);
+      ef.Skip(ErrorCorrectionDataLength);
+
+
+      if(Flags1 & 0x1)
+        StreamNumber = StreamNumber + 1;
+      if(Flags1 & 0x2)
+        StreamNumber = StreamNumber + 2;
+      if(Flags1 & 0x4)
+        StreamNumber = StreamNumber + 4;
+      if(Flags1 & 0x8)
+        StreamNumber = StreamNumber + 8;
+      if(Flags1 & 0x10)
+        StreamNumber = StreamNumber + 16;
+      if(Flags1 & 0x20)
+        StreamNumber = StreamNumber + 32;
+      if(Flags1 & 0x40)
+        StreamNumber = StreamNumber + 64;
+
+      if(Flags1 & 0x80)
+        Flags_Reserved = Flags_Reserved + 1;
+      if(Flags2 & 0x1)
+        Flags_Reserved = Flags_Reserved + 2;
+      if(Flags2 & 0x2)
+        Flags_Reserved = Flags_Reserved + 4;
+      if(Flags2 & 0x4)
+        Flags_Reserved = Flags_Reserved + 8;
+      if(Flags2 & 0x8)
+        Flags_Reserved = Flags_Reserved + 16;
+      if(Flags2 & 0x10)
+        Flags_Reserved = Flags_Reserved + 32;
+      if(Flags2 & 0x20)
+        Flags_Reserved = Flags_Reserved + 64;
+      if(Flags2 & 0x40)
+        Flags_Reserved = Flags_Reserved + 128;
+
+      if(Flags2 & 0x80)
+        EncryptedContentFlag = true;
+
+      _observer.WriteDebug(_pluginName, "    ASF_Stream_Properties_Object", false);
+      _observer.WriteDebug(_pluginName, "    ============================", false);
+      _observer.WriteDebug(_pluginName, "      Offset: " + offset, false);
+      _observer.WriteDebug(_pluginName, "      Object Size: " + ObjectSize, false);
+      _observer.WriteDebug(_pluginName, "      Time Offset: " + TimeOffset, false);
+      _observer.WriteDebug(_pluginName, "  ", false);
+    }
+    else {
+      _observer.WriteDebug(_pluginName, "Not enough data to read the contents of this object.", false);
+    }
+
+    ef.Seek(offset + ObjectSize);
+  }
+
+
+  ulong  ASF_Video_Media1;
+  ulong  ASF_Audio_Media1;
+
+}

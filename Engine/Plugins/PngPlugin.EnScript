@@ -1,0 +1,393 @@
+include "..\\Core Files\\Interfaces\PicturePluginInterface"
+
+class PngPlugin;
+
+
+// Dialog Class exposing variables specific to this format
+class PngDialog: DialogClass {
+
+  CheckBoxClass    chkPNG;
+  CheckBoxClass    chkPNG32;
+  StaticTextClass  txtPNG;
+  LongEditClass    lngMin;
+  LongEditClass    lngMax;
+  StaticTextClass  txtAuthor;
+
+  PngDialog(DialogClass parent, PngPlugin png) :
+    DialogClass    (parent, "PNG Settings:"),
+      chkPNG       (this, "Search for PNG", 10, 10, 100, 12, 0, png._enabled),
+      txtPNG       (this, "All PNG Files will be exported based on either the termination point of the image, or the " +
+                   "point at which valid PNG data ceases.", 10,  40,  220,  50, 0),
+      lngMin       (this, "Minimum allowed PNG size. (bytes: 0 - 100,000)", 10, 85, 100, 12, NUMBER,
+                                                png._pngMin, 0, 100000, WindowClass::REQUIRED),
+      lngMax       (this, "Maximum allowed PNG size. (bytes: 0 - 100,000,000)", 10, 115, 100, 12, NUMBER,
+                                                png._pngMax, 0, 100000000, WindowClass::REQUIRED),
+      txtAuthor      (this, "Plugin developed by:\r\n" +
+                            "\r\n" +
+                            "Trevor Fairchild\r\n" +
+                            "Electronic Crime Section\r\n" +
+                            "Ontario Provincial Police\r\n" +
+                            "C4P@e-crime.on.ca",
+                                        175, 175, 100, 50, 0)
+
+  {
+  }
+}
+
+class PngPlugin:PicturePluginInterface{
+
+
+  bool              _enabled;
+  bool              hasIHDR;
+  bool              hasIDAT;
+  bool              hasIEND;
+  bool              hasPLTE;
+  bool              myReturn;
+
+  double            _aspectRatio;
+  double            _bitDepth;
+
+  int               _headerIndex;
+  int               dataLength;
+  int               colorType;
+  int               imgHeight;
+  int               imgWidth;
+
+  long              _pngMax;
+  long              _pngMin;
+  long              _rangeToIgnoreSearchHits;
+
+  PngDialog         _dlg;
+
+  SearchClass       Search;
+
+  String            _extension;
+  String            _header;
+  String            _metaData;
+  String            _pluginName;
+  String            dataType;
+  String            _version;
+
+
+  // Plugin's Constructor, where the base values are set and any readable values
+  //   are loaded from the Storage file
+  PngPlugin()
+  {
+    _pluginName = "C4P Plugin - PNG";
+    _enabled = true;
+    _extension = "PNG";
+    _header = "\\x89\\x50\\x4E\\x47\\x0D\\x0A\\x1A\\x0A";
+    _metaData = "";
+    _pngMin = 0;
+    _pngMax = 10000000;  // 10 MB maximum, hard-coded.
+    _loadSettings();
+
+    _version = "1.0.0";
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("pngEnabled", _enabled);
+    myStorage.Value("pngMin", _pngMin);
+    myStorage.Value("pngMax", _pngMax);
+  }
+
+  bool CheckType(){
+    bool myReturn = false;
+
+    if(dataType == "bKGD" || dataType == "cHRM" || dataType == "dSIG" || dataType == "fRAc" ||
+       dataType == "gAMA" || dataType == "gIFg" || dataType == "gIFt" || dataType == "gIFx" ||
+       dataType == "hIST" || dataType == "iCCP" || dataType == "IDAT" || dataType == "IEND" ||
+       dataType == "iTXt" || dataType == "oFFs" || dataType == "pCAL" || dataType == "pHYs" ||
+       dataType == "PLTE" || dataType == "sBIT" || dataType == "sCAL" || dataType == "sPLT" ||
+       dataType == "sRGB" || dataType == "sTER" || dataType == "tEXt" || dataType == "tIME" ||
+       dataType == "tRNS" || dataType == "tXMP" || dataType == "vpAg" || dataType == "zTXt"){
+      myReturn = true;
+    }
+
+
+    if(myReturn)
+      WriteDebug("PngClass", "Chunk Type: " + dataType, true);
+    else
+      WriteDebug("PngClass", "Type not listed: " + dataType, true);
+
+    return myReturn;
+  }
+
+  long _validate(EntryClass e, long offset){
+
+    _aspectRatio = 0;
+    _bitDepth = 0;
+    dataLength = 0;
+    colorType = 0;
+    imgWidth = 0;
+    imgHeight = 0;
+    dataType = "";
+    myReturn = true;
+    hasIHDR  = true;
+    hasIDAT  = true;
+    hasIEND = true;
+    hasPLTE = false;
+
+    long mySize = 10000000;
+
+    EntryFileClass file();
+
+    #ifdef VERSION_6
+      file.Open(e, FileClass::SLACK);
+    #else
+      file.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
+    #endif
+
+    file.SetCodePage(CodePageClass::ANSI);
+
+    long UseThisLength;
+
+    WriteDebug("PngClass", "Expected Size: " + mySize, true);
+    WriteDebug("PngClass", "File Offset: " + offset, true);
+
+    mySize = offset + mySize;
+
+    file.Seek(offset);
+
+    //************************************************************************************************************************/
+    //FILE SIGNATURE                             -- MANDATORY - must be //x89//x50//x4E//x47//x0D//x0A//x1A//x0A
+    file.Skip(8);
+
+    //************************************************************************************************************************/
+    //IHDR                                       -- MANDATORY - skip first 4 bytes, next 4 must be //x49//x48//x44//x52 ("IHDR")
+    file.Skip(4);                                //skip over the Data LENGTH of IHDR - it's if valid, it'll be 0, if it isn't, it'll fail anyway
+    file.ReadString(dataType, 4);                //read in the 4 bytes identifying Data TYPE
+
+    if(dataType == "IHDR")                       //verify this is in fact the IHDR data chunk.
+      hasIHDR = true;
+    else
+      hasIHDR = false;
+
+    if(hasIHDR){
+      //from this point on you just keep on reading through each data chunk until the process fails, or reaches IEND
+      //skip 8 bytes to read in the Bit Depth
+
+      // Width (4 bytes)
+      imgWidth = file.ReadBinaryInt(4, true);
+
+      // Height (4 bytes)
+      imgHeight = file.ReadBinaryInt(4, true);
+
+      // BitDepth (1 byte)
+      int tempDepth = file.ReadBinaryInt(1);
+
+      // Color Type
+      colorType = file.ReadBinaryInt(1);
+
+      if(colorType == 0)
+        _bitDepth = tempDepth;
+      else if(colorType == 2)
+        _bitDepth = tempDepth * 3;
+      else if(colorType == 3)
+        _bitDepth = tempDepth;
+      else if(colorType == 4)
+        _bitDepth = tempDepth;
+      else if(colorType == 6)
+        _bitDepth = tempDepth * 4;
+
+
+      // Compression (1 byte), Filter (1 byte), Interlace (1 byte)
+      file.Skip(3);
+
+      WriteDebug("PngClass", "", true);
+      WriteDebug("PngClass", "===============", true);
+      WriteDebug("PngClass", "Data Chunk Found at " + file.GetPos() + " Chunk Type:  IHDR Data Length: 13", true);
+
+      hasIDAT = false;
+      hasIEND = false;
+      hasPLTE = false;
+
+      while(!hasIEND && file.GetPos() <= mySize) {
+        file.Skip(4);                             //moves past the CRC value of the previous chunk
+
+        WriteDebug("PngClass", "", true);
+        WriteDebug("PngClass", "===============", true);
+        WriteDebug("PngClass", "Data Chunk Found at " + file.GetPos(), true);
+
+        dataLength = file.ReadBinaryInt(4, true);      //read in the Data LENGTH of this next chunk - LITTLE ENDIAN
+        file.ReadString(dataType, 4);                  //read in the Data TYPE
+
+        //compare this DataType to the list of known Chunk Types
+        if(CheckType()){
+          if(dataType == "IDAT")                // ==> //x49//x44//x41//x54 = IDAT
+            hasIDAT = true;
+          else if(dataType == "IEND"){           // ==> //x49//x45//x4E//x44 = IEND
+            hasIEND = true;
+            dataLength = 0;
+          }
+          else if(dataType == "PLTE")
+            hasPLTE = true;
+
+          WriteDebug("PngClass", "Data Length = " + dataLength, true);
+          file.Skip(dataLength);                    //move beyond the length of this data chunk
+
+          //Reset dataType
+          dataType = "";
+        } else {
+          //otherwise change mySize to reflect this incomplete end of the file
+          mySize = file.GetPos() - 1;
+        }
+      }
+
+
+      if((file.GetPos() <= mySize) && hasIEND && hasIDAT){  // Removed This: && hasPLTE){
+        //jump over the CRC check of IEND
+        file.Skip(4);
+
+        //calulate the length of this file
+        UseThisLength = file.GetPos() - offset;
+
+        myReturn = true;
+      } else if(hasIDAT && hasPLTE) {
+        //if there is a PLTE and at least one IDAT present, then treat it as a truncated file and export it.
+
+        //jump over the CRC check of IEND
+        file.Skip(4);
+
+        //calulate the length of this file
+        UseThisLength = file.GetPos() - offset;
+        WriteDebug("PngClass", "PNG file calucated to be " + UseThisLength + " bytes in size", true);
+        WriteDebug("PngClass", "", true);
+
+        myReturn = true;
+      }
+
+    } else {
+      myReturn = false;
+    }
+
+    // Evaluate the Image Dimensions
+    if(imgHeight == 0 || imgWidth == 0){
+      myReturn = false;
+      WriteDebug("PngClass", "Invalid File Dimensions: " + imgWidth + " x " + imgHeight, true);
+    }
+
+    if(myReturn){
+      // ascertain the image aspect ratio
+      double tempH = imgHeight;
+      double tempW = imgWidth;
+      if(tempW > tempH)
+        _aspectRatio = tempW / tempH;
+      else
+        _aspectRatio = tempH / tempW;
+
+      WriteDebug("PngClass", "Bit Depth  = " + _bitDepth, true);
+      WriteDebug("PngClass", "ColorType  = " + colorType, true);
+      WriteDebug("PngClass", "Img Width  = " + imgWidth, true);
+      WriteDebug("PngClass", "Img Height = " + imgHeight, true);
+      WriteDebug("PngClass", "Aspect Rat = " + _aspectRatio, true);
+      WriteDebug("PngClass", "Carve Size = " + UseThisLength, true);
+
+
+
+      if(UseThisLength < _pngMin){
+        WriteDebug("PngClass", "PNG length (" + UseThisLength + ") violates user-specified minimum file size of " + _pngMin + ".", true);
+        UseThisLength = 0;
+
+      } else if(UseThisLength > _pngMax) {
+        WriteDebug("PngClass", "File Size reduced from " + UseThisLength + " to " + _pngMax, true);
+        UseThisLength = _pngMax;
+
+      }
+
+      _rangeToIgnoreSearchHits = UseThisLength;
+      return UseThisLength;
+
+    } else
+      return 0;
+  }
+
+
+
+
+
+  // =======================================================================================
+  // Interface Functions that MUST be present and SHOULD tie in with the rest of your script
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return null;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+
+  virtual String MetaData(){
+    return _metaData;
+  }
+
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new PngDialog(parent, this);
+    return _dlg;
+  }
+
+  virtual long Validate(EntryClass e, long offset){
+    return _validate(e, offset);
+  }
+
+  virtual double AspectRatio(){
+    return _aspectRatio;
+  }
+
+  virtual double BitDepth(){
+    return _bitDepth;
+  }
+
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 10240;  // 10kb
+  }
+  // =======================================================================================
+}
+

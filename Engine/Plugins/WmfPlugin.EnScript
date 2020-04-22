@@ -1,0 +1,192 @@
+include "..\\Core Files\\Interfaces\\PicturePluginInterface"
+include "WMF Parser\\WmfBase"
+
+
+class WmfPlugin;
+
+class WmfDialog: DialogClass{
+
+  CheckBoxClass    chkEnabled;
+  StaticTextClass  txtInfo;
+  LongEditClass    lngMin;
+  LongEditClass    lngMax;
+  StaticTextClass  txtAuthor;
+
+
+  WmfDialog(DialogClass parent, WmfPlugin plug):
+    DialogClass      (parent, "Windows Meta File Settings:"),
+      chkEnabled     (this, "Search for Sample Files",
+                                        10,  10, 100, 12, 0, plug._enabled),
+      txtInfo        (this, "Blah blah blah blah blah blah blah.",
+                                        10,  25, 220, 50, 0),
+      lngMin         (this, "Minimum allowed Sample size (in bytes). (0 - 1,000,000)",
+                                        10,  85, 100, 12, 0, plug._wmfMin, 0, 1000000, WindowClass::REQUIRED),
+      lngMax         (this, "Maximum allowed Sample size (in bytes). (10,000,000 - 10,000,000,000)",
+                                        10, 120, 100, 12, 0, plug._wmfMax, 10000000, 10000000000, WindowClass::REQUIRED),
+      txtAuthor      (this, "Plugin developed by:\r\n" +
+                            "\r\n" +
+                            "Your Name\r\n" +
+                            "Your Section\r\n" +
+                            "Your Organization\r\n" +
+                            "Your Email",
+                                        175, 175, 100, 50, 0)
+  {
+  }
+}
+
+class WmfPlugin:PicturePluginInterface{
+
+  WmfDialog   _dlg;
+
+  bool        _enabled;
+
+  double      _aspectRatio;
+  double      _bitDepth;
+
+  int         _headerIndex;
+
+  long        _wmfMax;
+  long        _wmfMin;
+  long        _rangeToIgnoreSearchHits;
+
+  String      _extension;
+  String      _header;
+  String      _metaData;
+  String      _pluginName;
+  String      _version;
+
+  WmfPlugin()
+  {
+    _pluginName = "C4P Plugin - WMF";
+    _enabled = true;
+    _extension = "WMF";
+    _header = "\\x01\\x00..\\x00[\\x03|\\x01]";
+    _metaData = "";
+    _wmfMin = 0;
+    _wmfMax = 1000000000;
+    _loadSettings();
+
+    _version = "1.0.0";
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("WmfEnabled", _enabled);
+    myStorage.Value("WmfMin", _wmfMin);
+    myStorage.Value("WmfMax", _wmfMax);
+  }
+
+  long _validate(EntryClass e, long offset){
+    _metaData = "";
+
+    // Open the Entry and jump to the search hit location
+    EntryFileClass ef();
+    ef.Open(e, FileClass::SLACK);
+    ef.SetCodePage(CodePageClass::ANSI);
+    ef.Seek(offset);
+
+    // Specify the largest possible size this 3GP could be, based on the available data
+    long maxSize = _wmfMax;
+    long upperSize = e.PhysicalSize();
+
+    // Deleted files will show a larger LogicalSize, so watch for that
+    if(e.LogicalSize() > e.PhysicalSize()) upperSize = e.LogicalSize();
+
+    // Limit the file accordingly
+    if(maxSize > upperSize)
+      maxSize = upperSize;
+
+    // Pass the opened file to the base Plugin for evaluation
+    WmfBase base(_observer);
+    long carveSize = base.Validate(ef, offset);
+
+    if (carveSize > _wmfMax){
+      WriteDebug("WmfPlugin", "File Validated Size (" + carveSize + ") exceeds Plugin Maximum (" + _wmfMax + ").  Data will be truncated.", true);
+      _rangeToIgnoreSearchHits = _wmfMax;
+      return _wmfMax;
+    }
+    else if (carveSize < _wmfMin){
+      if(carveSize != -1) WriteDebug("WmfPlugin", "File Validated Size (" + carveSize + ") is smaller than the Plugin Minimum.  Data will be ignored", true);
+      _rangeToIgnoreSearchHits = -1;
+      return -1;
+    }
+    else {
+      _rangeToIgnoreSearchHits = carveSize;
+      return carveSize;
+    }
+  }
+
+
+  // ==============================================
+  // Interface methods
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return null;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+  virtual double AspectRatio(){
+    return _aspectRatio;
+  }
+  virtual double BitDepth(){
+    return _bitDepth;
+  }
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+  virtual String MetaData(){
+    return _metaData;
+  }
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new WmfDialog(parent, this);
+    return _dlg;
+  }
+  virtual long Validate(EntryClass e, long offset){
+    return _validate(e, offset);
+  }
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 10240;  // 10kb
+  }
+  // ==============================================
+}

@@ -1,0 +1,273 @@
+include "..\\Core Files\\Interfaces\\MoviePluginInterface"
+
+class Mj2Plugin;
+
+class Mj2Dialog: DialogClass{
+
+  CheckBoxClass    chkEnabled;
+  StaticTextClass  txtInfo;
+  LongEditClass    lngMin;
+  LongEditClass    lngMax;
+  StaticTextClass  txtAuthor;
+
+  Mj2Dialog(DialogClass parent, Mj2Plugin mj2):
+    DialogClass      (parent, "Motion JPEG 2000 Settings:"),
+      chkEnabled     (this, "Search for MJ2 Files",
+                                        10,  10, 100, 12, 0, mj2._enabled),
+      txtInfo        (this, "MJ2 is the 'next generation' of MJ2.",
+                                        10,  25, 220, 50, 0),
+      lngMin         (this, "Minimum allowed MJ2 size (in bytes). (0 - 1,000,000)",
+                                        10,  85, 100, 12, 0, mj2._fileMin, 0, 1000000, WindowClass::REQUIRED),
+      lngMax         (this, "Maximum allowed MJ2 size (in bytes). (10,000,000 - 10,000,000,000)",
+                                        10, 120, 100, 12, 0, mj2._fileMax, 10000000, 10000000000, WindowClass::REQUIRED),
+      txtAuthor      (this, "Plugin developed by:\r\n" +
+                            "\r\n" +
+                            "Trevor Fairchild\r\n" +
+                            "Electronic Crime Section\r\n" +
+                            "Ontario Provincial Police\r\n" +
+                            "C4P@e-crime.on.ca",
+                                        175, 175, 100, 50, 0)
+  {
+  }
+}
+
+class Mj2Plugin:MoviePluginInterface{
+
+  Mj2Dialog   _dlg;
+
+  bool        _enabled;
+
+  double      _movieLength;
+
+  int         _headerIndex;
+
+  long        _fileMax;
+  long        _fileMin;
+  long        _rangeToIgnoreSearchHits;
+
+  String      _extension;
+  String      _header;
+  String      _metaData;
+  String      _pluginName;
+  String      _version;
+
+  Mj2Plugin()
+  {
+    _pluginName = "C4M Plugin - MJ2";
+    _enabled = true;
+    _extension = "MJ2";
+    _header = "....\\x6A\\x50\\x20\\x20";  //4byte length marker, then the "jP  " marker
+    _metaData = "";
+    _fileMin = 0;
+    _fileMax = 10000000000;
+    _loadSettings();
+
+    _version = "1.0.0";
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("Mj2Enabled", _enabled);
+    myStorage.Value("Mj2Min", _fileMin);
+    myStorage.Value("Mj2Max", _fileMax);
+  }
+
+  long _validate(EntryClass e, long offset){
+    _metaData = "";
+    _movieLength = -1;
+    _rangeToIgnoreSearchHits = 0;
+
+    // Open the Entry and jump to the search hit location
+    EntryFileClass ef();
+    ef.Open(e, FileClass::SLACK);
+    ef.SetCodePage(CodePageClass::ANSI);
+    ef.Seek(offset);
+
+    // Specify the largest possible size this file could be, based on the available data
+    long maxSize = _fileMax;
+    long upperSize = e.PhysicalSize();
+
+    // Deleted files will show a larger LogicalSize, so watch for that
+    if(e.LogicalSize() > e.PhysicalSize()) upperSize = e.LogicalSize();
+
+    // Limit the file accordingly
+    if(maxSize > upperSize)
+      maxSize = upperSize;
+
+    // There are main parts of a JP2 file
+    bool hasFtyp;
+    bool hasData;
+
+    long boxLength;
+    String boxType;
+    bool cont = true;
+
+    while(cont){
+
+      // Check the box
+      boxLength = ef.ReadBinaryInt(4, true);
+      ef.ReadString(boxType, 4);
+
+      WriteDebug(_pluginName, "Potential Box Identified:", false);
+      WriteDebug(_pluginName, "  => Type "   + boxType, false);
+      WriteDebug(_pluginName, "  => Offset " + (ef.GetPos() - 8), false);
+      WriteDebug(_pluginName, "  => Length " + boxLength, false);
+
+
+      // these are the known 'legal' box types
+      if(boxType == "jP  " || boxType == "ftyp" ||
+        boxType == "rreq"  || boxType == "pdin" ||
+        boxType == "jp2c"  || boxType == "jp2h" ||
+        boxType == "moov"  || boxType == "moof" ||
+        boxType == "mfra"  || boxType == "mdat" ||
+        boxType == "free"  || boxType == "skip" ||
+        boxType == "meta"  || boxType == "meco" ||
+        boxType == "wide"  || boxType == "uuid"){
+      }
+        // do nothing
+      else
+        WriteDebug(_pluginName, "!!Unknown Box Type!! " + boxType, false);
+
+
+      // The jp2c BoxType is the start of the image data, and its boxLength will be zero
+      // boxLength has to be at least 8:  4 bytes length + 4 bytes type
+      if(boxLength < 8 && boxType != "mj2c"){
+        WriteDebug(_pluginName, "Box Length less than three.  Exiting while loop", false);
+        cont = false;
+      }
+      else {
+        // Motion JPEG 2000 files needs to have this.  No validation is taking place just yet
+        if(boxType == "moov"){
+          hasData = true;
+        }
+
+        if(boxType == "ftyp"){
+          // Check to see what type of file this is
+          String fileType;
+          ef.ReadString(fileType, 4);
+          ef.Skip(-4);
+          hasFtyp = true;
+        }
+
+        if(boxLength + ef.GetPos() - 8 > ef.GetSize())
+          cont = false;
+
+        // Jump to the start of the next box
+        if(cont)
+          ef.Skip(boxLength - 8);
+
+        // Make sure that where we are isn't over the maximum size of the file format
+        if(ef.GetPos() > offset + maxSize)
+            cont = false;
+
+        // Make sure there are at least 8 more bytes to search
+        if(ef.GetPos() + 8 >= ef.GetSize()){
+          cont = false;
+        }
+      }
+    }
+
+
+    if(hasFtyp && hasData){
+
+      long carveSize = ef.GetPos() - offset;
+      WriteDebug(_pluginName, "MJ2 Search Hit validated.  Size set as: " + carveSize, false);
+
+      if(carveSize > maxSize){
+        carveSize = maxSize;
+        _rangeToIgnoreSearchHits = carveSize;
+        WriteDebug(_pluginName, "  => size exceeds format maximum of " + maxSize + ".  Size has been truncated to comply", false);
+      }
+
+      if(carveSize < _fileMin){
+        WriteDebug(_pluginName, "  => size is under the minimum format size.  File ignored.", false);
+        _rangeToIgnoreSearchHits = carveSize;
+        return 0;
+      }
+
+      _rangeToIgnoreSearchHits = carveSize;
+      return carveSize;
+
+    } else {
+      WriteDebug(_pluginName, "MJ2 Search Hit was missing one or more key elements: hasFtyp = " + hasFtyp + ", hasData = " + hasData, false);
+      _rangeToIgnoreSearchHits = 0;
+      return 0;
+
+    }
+  }
+
+
+
+
+
+
+  // ==============================================
+  // Interface methods
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return null;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+  virtual String MetaData(){
+    return _metaData;
+  }
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new Mj2Dialog(parent, this);
+    return _dlg;
+  }
+  virtual long Validate(EntryClass e, long offset){
+    return _validate(e, offset);
+  }
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual double MovieLength(){
+    return _movieLength;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 102400;  // 100kb
+  }
+  // ==============================================
+}

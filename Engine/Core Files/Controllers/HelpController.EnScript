@@ -1,0 +1,77 @@
+include "ConsoleController"
+include "PictureOutputController"
+include "MovieOutputController"
+include "..\\..\\Classes\\OptionsClass"
+
+class HelpController {
+
+  bool               CanHelp;
+  ConsoleController  MyConsole;
+  OptionsClass       MyOptions;
+  String             HelpPath;
+
+  PictureOutputController  MyPictureOutput;
+  MovieOutputController    MyMovieOutput;
+
+  HelpController(OptionsClass myOptions,
+                          PictureOutputController myPictureOutput,
+                          MovieOutputController   myMovieOutput,
+                          ConsoleController       myConsole):
+    MyOptions = myOptions,
+    MyPictureOutput = myPictureOutput,
+    MyMovieOutput = myMovieOutput,
+    MyConsole = myConsole
+  {
+    BuildHelpPath();
+    //MyConsole = new ConsoleController(MyOptions);
+  }
+
+
+  void BuildHelpPath(){
+    String path = SystemClass::ScriptPath();
+    int i = path.GetLength() - 1;
+    String c = path.SubString(i,1);
+    while(c != "\\" && i >= 0){
+      i = i - 1;
+      c = path.SubString(i,1);
+    }
+    path = path.SubString(0,i+1);
+    path = path + "Engine\\Core Files\\Help\\C4P_EnScript.chm";
+
+    if(MyOptions.Debug){
+      MyPictureOutput.WriteDebug("HelpController", "HelpPath = " + path);
+      MyMovieOutput.WriteDebug("HelpController", "HelpPath = " + path);
+    }
+
+    HelpPath = path;
+  }
+
+  void HelpFilePresent(){
+
+    if (!LocalMachine.PathExists(HelpPath)){
+      MyConsole.WriteFullLine("Could not find the Help file: " + HelpPath);
+      if(MyOptions.Debug){
+        MyPictureOutput.WriteDebug("HelpController", "Help File Not Found");
+        MyMovieOutput.WriteDebug("HelpController", "Help File Not Found");
+      }
+
+      CanHelp = false;
+    }
+    else
+      CanHelp = true;
+  }
+
+  void ShowHelp(int mapId){
+    ExecuteClass exec();
+    exec.SetApplication("hh.exe");
+    exec.SetFolder("C:\\Windows");
+    exec.SetCommandLine("-mapid " + mapId + " \"" + HelpPath + "\"");
+    exec.SetShow(true);
+    if(!exec.Start(LocalMachine, 0)){
+      if(MyOptions.Debug){
+        MyPictureOutput.WriteDebug("HelpController", "Couldn't launch help file.");
+        MyMovieOutput.WriteDebug("HelpController", "Couldn't launch help file.");
+      }
+    }
+  }
+}

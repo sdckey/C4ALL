@@ -1,0 +1,231 @@
+// version 1.0.1:
+// - added validation code to the DHT segment - to address JPG data which seems to fully comply with the structure, even beyond the DHT, and yet are not true
+//   pictures.  The number of 'symbols' in the DHT is compared to the reported size of the segment to identify invalid data.
+
+
+include "..\\Core Files\\Interfaces\\PicturePluginInterface"
+include "..\\Core Files\\Models\\B64DecoderClass"
+include "JpgBase"
+
+class Jpg64Plugin;
+
+
+// Dialog Class exposing variables specific to this format
+class Jpg64Dialog: DialogClass {
+
+  Jpg64Plugin      Jpg;
+
+  CheckBoxClass    chkJPG;
+  IntEditClass     intJPG;
+  LongEditClass    lngJPG;
+  StaticTextClass  txtJPG,
+                   txtPercentage;
+  CheckBoxClass    chkThumbs;
+  StaticTextClass  txtAuthor;
+
+  Jpg64Dialog(DialogClass parent, Jpg64Plugin jpg) :
+    DialogClass    (parent, "JPG Settings (Base 64):"),
+      chkJPG       (this, "Search for Base64 JPGs", 10, 10, 100, 12, 0, jpg._enabled),
+      txtJPG       (this, "All JPG Files must contain specified file segments.  After this data, where a valid footer " +
+                   "is found, the image will be exported accordingly.  Where no footer is found, the image " +
+                   "size will be based on the compression rate specified below:", 10,  25,  220,  50, 0),
+      intJPG       (this, "Assume a JPG Compression Ratio of", 10,  80,   40,  12, 0,
+                                                jpg.compressionRatio, 10, 90, WindowClass::REQUIRED),
+      txtPercentage(this, "% (10% - 90%)", 55,  92,   40,  12, 0),
+      lngJPG       (this, "Maximum allowed JPG size. (bytes: 0 - 100,000,000)", 10, 115, 100, 12, NUMBER,
+                                                jpg._jpgMax, 0, 100000000, WindowClass::REQUIRED),
+      chkThumbs    (this, "Export Embeddeded Thumbnails", 10, 150, 100, 12, 0, jpg._exportThumbs),
+      txtAuthor    (this, "Plugin developed by:\r\n" +
+                          "\r\n" +
+                          "Trevor Fairchild\r\n" +
+                          "Electronic Crime Section\r\n" +
+                          "Ontario Provincial Police\r\n" +
+                          "C4P@e-crime.on.ca",
+                                        175, 175, 100, 50, 0),
+      Jpg = jpg
+  {
+  }
+}
+
+
+// Actual Format class, which implements the PicturePluginInterface
+class Jpg64Plugin:PicturePluginInterface{
+
+
+  bool              _enabled;
+  bool              _exportThumbs;
+
+  double            _aspectRatio;
+  double            _bitDepth;
+
+  int               _headerIndex;
+  int               compressionRatio;
+
+  Jpg64Dialog       _dlg;
+
+  long              _jpgMax;
+  long              _jpgMin;
+  long              _rangeToIgnoreSearchHits;
+
+  MemoryFileClass   _mf;
+
+  String            _extension;
+  String            _header;
+  String            _metaData;
+  String            _pluginName;
+  String            _version;
+
+
+  // Plugin's Constructor, where the base values are set and any readable values
+  //   are loaded from the Storage file
+  Jpg64Plugin()
+  {
+    _pluginName = "C4P Plugin - Base64 JPG";
+    _enabled = true;
+    _extension = "JPG";
+    _header = "\\x2F\\x39\\x6A\\x2F";
+    _metaData = "";
+    _loadSettings();
+    _jpgMin = 0;
+    _jpgMax = 10000000;
+    _exportThumbs = false;
+    compressionRatio = 60;
+    _loadSettings();
+
+    _version = "1.0.3";
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("jpg64Enabled", _enabled);
+    myStorage.Value("jpg64Min", _jpgMin);
+    myStorage.Value("jpg64Max", _jpgMax);
+    myStorage.Value("compression", compressionRatio);
+    myStorage.Value("exportThumbs", _exportThumbs);
+  }
+
+
+
+  long _validate(EntryClass e, long offset){
+    // Create a temp file to store the decoded data
+    DecoderClass b64(_observer);
+
+    _mf = new MemoryFileClass();
+    _mf = b64.DecodeEntry(e, offset);
+    _mf.Seek(0);
+
+    long val;
+
+    if(_mf.GetSize() > 0){
+      JpgBase jb(_observer);
+      jb._jpgMin = _jpgMin;
+      jb._jpgMax = _jpgMax;
+      jb.compressionRatio = compressionRatio;
+
+      // offset refers to the encoded offset within the Entry
+      // But we've alaredy converted this to a MemoryFileClass object,
+      // ...so the offset to validate from is ZERO - the start of the MemoryFileClass object.
+      //val = jb._validate(_mf, offset);
+      val = jb._validate(_mf, 0);
+
+      _aspectRatio = jb._aspectRatio;
+      _bitDepth = jb._bitDepth;
+      _metaData = jb._metaData;
+
+      // for encoded Base64, there's nothing to do be done about embedded thumbnails - just skip over the full length
+      if(_exportThumbs){
+        WriteDebug(_pluginName, "Export Thumbs option on.  RangeToIgnoreSearchHits set to 1", true);
+        _rangeToIgnoreSearchHits = 1;
+      }
+      else {
+        WriteDebug(_pluginName, "Export Thumbs option off.  RangeToIgnoreSearchHits set to " + jb.OffsetToStartOfScan, true);
+        _rangeToIgnoreSearchHits = jb.OffsetToStartOfScan;
+      }
+    }
+
+    return val;
+  }
+
+  // =======================================================================================
+  // Interface Functions that MUST be present and SHOULD tie in with the rest of your script
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return _mf;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+
+  virtual String MetaData(){
+    return _metaData;
+  }
+
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new Jpg64Dialog(parent, this);
+    return _dlg;
+  }
+
+  virtual long Validate(EntryClass e, long offset){
+    return _validate(e, offset);
+  }
+
+  virtual double AspectRatio(){
+    return _aspectRatio;
+  }
+
+  virtual double BitDepth(){
+    return _bitDepth;
+  }
+
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 5120;  // 5kb
+  }
+  // =======================================================================================
+}

@@ -1,0 +1,73 @@
+[OPTIONS]
+Compatibility=1.1
+Compiled file=C4P_EnScript.chm
+Full-text search=Yes
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Compiled file=C4P_EnScript.chm
+Contents file=C4P_EnScript.hhc
+Index file=C4P_EnScript.hhk
+Title=Categorizer for Pictures EnScript
+Default topic=Introduction.htm
+Error log file=compiler.log
+
+[FILES]
+Advanced_Options.htm
+;Title=Advanced Options
+Case_Report_Values.htm
+;Title=Case Report Values
+File_Format_Options.htm
+;Title=File Format Options
+Introduction.htm
+;Title=Introduction
+Main_Settings_Page_.htm
+;Title=Main Settings Page:
+Mounting_Options.htm
+;Title=Mounting Options
+Resume_Settings.htm
+;Title=Resume Settings
+Troubleshooting.htm
+;Title=Troubleshooting
+rtex.gif
+dwnex.gif
+htmlhelp.css
+master.js
+
+[ALIAS]
+#include C4P_EnScript.ali
+
+[MAP]
+#include C4P_EnScript.h

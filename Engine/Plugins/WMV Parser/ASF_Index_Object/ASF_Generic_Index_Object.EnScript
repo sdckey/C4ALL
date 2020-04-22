@@ -1,0 +1,65 @@
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+include "ASF_Simple_Index_Object"
+include "ASF_Index_Object"
+include "ASF_Media_Object_Index_Object"
+include "ASF_Timecode_Index_Object"
+
+class ASF_Generic_Index_Object{
+
+  ASF_Simple_Index_Object        SimpleIndexObject;
+  ASF_Index_Object               IndexObject;
+  ASF_Media_Object_Index_Object  MediaObjectIndexObject;
+  ASF_Timecode_Index_Object      TimecodeIndexObject;
+  bool keepWorking;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  ASF_Generic_Index_Object(const String &thePluginName, ObserverInterface theObserver){
+    _pluginName = thePluginName;
+    _observer = theObserver;
+
+    ASF_Simple_Index_Object1       = 0x90080033B1E5CF11;
+    ASF_Index_Object1              = 0xD329E2D6DA35D111;
+    ASF_Media_Object_Index_Object1 = 0xF803B1FEAD12644C;
+    ASF_Timecode_Index_Object1     = 0xD03FB73C4A0C0348;
+  }
+
+  void Read(EntryFileClass ef, const long &offset){
+    ef.Seek(offset);
+    keepWorking = true;
+
+    // Read in the first 8 bytes to see what, if any, kind of index we have
+    while(ef.GetPos() < ef.GetSize() && keepWorking){
+      ulong objectId1 = ef.ReadBinaryInt(8, true);
+      ef.Skip(-8);
+
+      if(objectId1 == ASF_Simple_Index_Object1){
+        SimpleIndexObject = new ASF_Simple_Index_Object(_pluginName, _observer);
+        SimpleIndexObject.Read(ef, ef.GetPos());
+      }
+      else if(objectId1 == ASF_Index_Object1) {
+        IndexObject = new ASF_Index_Object(_pluginName, _observer);
+        IndexObject.Read(ef, ef.GetPos());
+      }
+      else if(objectId1 == ASF_Media_Object_Index_Object1) {
+        MediaObjectIndexObject = new ASF_Media_Object_Index_Object(_pluginName, _observer);
+        MediaObjectIndexObject.Read(ef, ef.GetPos());
+      }
+      else if(objectId1 == ASF_Timecode_Index_Object1){
+        TimecodeIndexObject = new ASF_Timecode_Index_Object(_pluginName, _observer);
+        TimecodeIndexObject.Read(ef, ef.GetPos());
+      }
+      else{
+        _observer.WriteDebug(_pluginName, "Unknown Object Id.  Terminating Index parsing", false);
+        keepWorking = false;
+      }
+    }
+  }
+
+  ulong ASF_Simple_Index_Object1;
+  ulong ASF_Index_Object1;
+  ulong ASF_Media_Object_Index_Object1;
+  ulong ASF_Timecode_Index_Object1;
+}

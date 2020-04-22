@@ -1,0 +1,21 @@
+[Settings]
+html=
+images=Images
+ccs=htmlhelp.css
+i=C4P_EnScript.hhk
+last_path=d:\EnScripts\C4P v4x\C4P402\Help
+prefix list=IDH_,
+css=d:\EnScripts\C4P v4x\C4P402\Help\
+t=C4P_EnScript.hhc
+web_dhtml=1
+web_indxpg=C4P_EnScriptWebIndex.html
+web_tocpg=C4P_EnScriptWebTOC.html
+web_mainpg=C4P_EnScriptWebMain.html
+web_left=30
+web_pix=0
+web_maintitle=Categorizer for Pictures EnScript
+web_toctitle=Contents
+web_idxtitle=Index
+preview=1
+[IMAGE MAP]
+MapCount=0

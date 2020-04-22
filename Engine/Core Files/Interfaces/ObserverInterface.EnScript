@@ -1,0 +1,27 @@
+class ObserverInterface{
+
+  // Plugins need the option to send up messages and other forms of output
+  // Even so, they go to the main script which will decide what to do
+  pure void WriteDebug(const String &source, const String &message, int type);
+
+  pure void RaiseMessage(const String &title, const String &message);
+
+  pure void SetRange(const String &msg, long size);
+
+  pure void SetStatusMessage(const String &msg);
+
+  pure void RestoreStatusMessage();
+
+  pure void AppendStatusMessage(const String &val);
+
+  pure void AppendStatusRange(const String &msg, long size);
+
+  pure void WriteFullLine(const String &val);
+
+  pure void WritePartLine(const String &val);
+
+  pure void WriteEndLine(const String &val);
+
+  pure void WriteLine(const String &val);
+
+}

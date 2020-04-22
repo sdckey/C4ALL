@@ -1,0 +1,290 @@
+/*
+  Dialog to collect the execution settings for the script
+*/
+
+include "PicturePluginsDialog"
+include "MoviePluginsDialog"
+include "..\\..\\TriageDlgs\\LibraryDialog"
+include "..\\..\\TriageDlgs\\OdbcDialog"
+include "..\\..\\TriageDlgs\\SQLDialog"
+include "..\\Controllers\HelpController"
+include "..\\..\\ActivePlugins"
+include "AutoHandlerClass"
+include "PluginListClass"
+include "TreeTableEditClassDialog"
+
+include "..\\Controllers\\DataController"
+
+#ifdef VERSION_8
+class TagDialog: DialogClass{
+  TreeTableEditClass tree;
+
+  TagDialog(DialogClass parent, CaseClass c):
+    DialogClass(parent, "Select Case Tags:"),
+    tree       (this, "Case Tags", 10, 10, 500, 100, 0, c.TagItemRoot(), ContextClass::CANCHECK | ContextClass::CANVIEWNODES | ContextClass::CANINCLUDE )
+    {
+    }
+}
+#endif
+
+
+class SettingsDialog: DialogClass {
+//
+//#ifdef VERSION_8
+//  int SearchSelected;
+//#endif
+
+  OptionsClass      MyOptions;
+  ActivePlugins     MyActivePlugins;
+  ConsoleController MyConsole;
+
+  PicturePluginsDialog     MyPicturePluginsDialog;
+  MoviePluginsDialog       MyMoviePluginsDialog;
+
+  // C4P Disclosure Package Options
+  GroupBoxClass     grpOutput;
+  PathEditClass     txtFolder;
+  CheckBoxClass     chkBook;
+  CheckBoxClass     chkLef;
+
+  // Selected Files Options
+  RadioButtonClass  radSelection;
+#ifdef VERSION_6
+  CheckBoxClass     chkSlack;
+  CheckBoxClass     chkUC;
+#endif
+
+  // Search Options
+  GroupBoxClass     grpSettings;
+
+  StaticTextClass   lblFormats;
+  ButtonClass       btnPlugins;
+  CheckBoxClass     chkNoSmall;
+
+  // Database & Library Options
+  RadioButtonClass  radDatabase;
+  CheckBoxClass     chkLibrary;
+
+  // Debug Options
+  GroupBoxClass     grpDebug;
+  CheckBoxClass     chkDebug;
+  CheckBoxClass     chkDebugCurr;
+  CheckBoxClass     chkIgnoreFailures;
+  CheckBoxClass     chkSaveConsole;
+  StaticTextClass   txtDebug;
+
+  // Bottom pane Script Details
+  GroupBoxClass     grpCompile;
+  StaticTextClass   txtVersion;
+
+  HelpController    MyHelp;
+  ButtonClass       btnHelp;
+
+
+  SettingsDialog(DialogClass parent, OptionsClass myOptions, HelpController myHelp, ActivePlugins myActivePlugins, ConsoleController myConsole) :
+    DialogClass    (parent, "Main Settings Page:"),
+
+      // C4P Disclosure Package Options
+      grpOutput    (this, "C4P/C4M Disclosure Package Options",  10,   8, 300, 57, 0),
+      txtFolder    (this, "Create Package here:",            30,  17, 220, 12, 0, myOptions.ReportPath, WindowClass::REQUIRED),
+      chkBook      (this, "Create a Bookmark for every file that is extracted",
+                                                             40,  40, 150, 12, 0, myOptions.MakeBookmarks),
+      chkLef       (this, "Preserve the C4All package in a LEF",
+                                                             40,  50, 150, 12, 0, myOptions.CreateLef),
+      btnHelp      (this, "?",                              290,  10,  20, 12, 0),
+
+      // Selected Files Options
+#ifdef VERSION_6
+      radSelection (this, "Selected Files Options:",         10,  70, 150, 57, 0, myOptions.SearchSelected, "Search All Files\tSearch Selected Files Only\tExclude Selected Files"),
+      chkSlack     (this, "Search File Slack Regardless",    25, 130, 100, 12, 0, myOptions.SearchSlack),
+      chkUC        (this, "Exclude Unallocated Regardless",  25, 140, 100, 12, 0, myOptions.ExcludeUnallocated),
+#else
+      radSelection (this, "Selected Files Options:",         10,  70, 150, 57, 0, myOptions.SearchSelected,
+                                                                                                  "Search All Files\t" +
+                                                                                                  "Search All Tagged Files\t"
+                                                                                                  "Exclude All Tagged Files\t" +
+                                                                                                  "Search Current View Only"),
+#endif
+
+      // Search Options
+      grpSettings  (this, "Search Options:",                 10, 160, 150, 85, 0),
+      btnPlugins   (this, "Change Plugin Settings",          20, 175, 135, 12, 0),
+      lblFormats   (this, myActivePlugins.GetSelected() + " / " + myActivePlugins.myPlugins.Count() + " Plugins available",
+                                                             42, 190, 100, 12, 0),
+      chkNoSmall   (this, "Ignore Small Files",              20, 205, 135, 12, 0, myOptions.IgnoreSmall),
+
+      // Database & Library Options
+      radDatabase  (this, "Pre-Categorization Options:",    180,  70, 130, 85, 0, myOptions.DbType, "No Database\tSQL Server\tmySQL"),
+      chkLibrary   (this, "Populate Picture Library",       190, 130, 110, 12, 0, myOptions.MakeLibrary),
+
+      // Debug Options
+      grpDebug     (this, "Debugging Options:",             170, 160, 140, 85, 0),
+      chkDebug     (this, "Run in Debug Mode",              185, 172, 100, 12, 0, myOptions.Debug),
+      chkDebugCurr (this, "Save Current Entry Only",        185, 184, 100, 12, 0, myOptions.DebugCurrentOnly),
+      chkIgnoreFailures(this, "Bookmark Failed Extracts",   185, 195, 100, 12, 0, myOptions.IgnoreFailedExtract),
+      chkSaveConsole(this, "Save Console to disk",          185, 208, 100, 12, 0, myOptions.SaveConsole),
+      txtDebug     (this, "FYI:  Debug = Slow",             185, 225,  20, 12, 0),
+
+      // Bottom pane Script Details
+      grpCompile   (this, "Script Details:",                 10, 250, 300, 75, 0),
+      txtVersion   (this, "Special Note:  Anti-Virus programs can wind up deleting or quarantining\n" +
+                          "files that are exported by this EnScript.  Forewarned is forearmed.\n\n" +
+                          "                       " + myOptions.Comments + "\n" +
+                          "                                 Compile Date: " + MyOptions.CompileDate + "\n" +
+                          "                                    EnScript Version: " + myOptions.VersionNum,
+                                                             25, 265, 200, 12, 0),
+
+      MyOptions = myOptions,
+      MyHelp = myHelp,
+      MyActivePlugins = myActivePlugins,
+      MyConsole = myConsole
+  {
+#ifdef VERSION_6
+    // Disable chkSlack as required
+    if(MyOptions.SearchSelected == 0)
+      chkSlack.Enable(false);
+#endif
+    chkDebugCurr.Enable(false);
+    txtDebug.SetVisible(false);
+  }
+
+  virtual void ChildEvent(const EventClass &event) {
+    DialogClass::ChildEvent(event);
+
+    // What to do if the user click the library button
+    if(chkLibrary.Matches(event)){
+      if(chkLibrary.GetValue() == true)
+        (new LibraryDialog(this, MyOptions)).Execute();
+    }
+    else if(chkDebug.Matches(event)){
+      if(chkDebug.GetValue() == 1){
+        chkDebugCurr.Enable(true);
+        txtDebug.SetVisible(true);
+      }
+      else {
+        chkDebugCurr.Enable(false);
+        chkDebugCurr.SetValue(0);
+        txtDebug.SetVisible(false);
+      }
+    }
+    else if(btnHelp.Matches(event)){
+      MyHelp.ShowHelp(1003);
+    }
+    else if(chkSaveConsole.Matches(event)){
+      MyConsole.SaveConsoleChanged(chkSaveConsole.GetValue());
+    }
+
+    // What to do if the user clicks the formats button
+    else if(btnPlugins && btnPlugins.Matches(event)){
+      // On the fly, build a name list representing the plugins that are available
+      PluginListClass Plugins(null, false, "", "", null, "");
+      PluginListClass PicPlugins(Plugins, false, "C4P Plugins", "C4P Plugins", null, "");
+      PluginListClass MovPlugins(Plugins, false, "C4M Plugins", "C4M Plugins", null, "");
+
+      foreach(PluginList p in MyActivePlugins.myPlugins){
+        foreach(SymbolClass::InheritClass ic in p.Plugin.DynamicType().InheritList()){
+          if(ic.Type().Name() == "PicturePluginInterface"){
+            new PluginListClass(PicPlugins, p.Plugin.Enabled(), p.Plugin.PluginName(), p.Plugin.Extension(), p, p.Plugin.Version());
+          }
+          else if(ic.Type().Name() == "MoviePluginInterface"){
+            new PluginListClass(MovPlugins, p.Plugin.Enabled(), p.Plugin.PluginName(), p.Plugin.Extension(), p, p.Plugin.Version());
+          }
+        }
+      }
+
+      // Create a manual handler for this list, which defines how and what we will display
+#ifdef VERSION_6
+      AutoHandlerClass  handler(Plugins.DynamicType(), "C4All Plugins", true);
+#else
+      IconClass iconid;
+      AutoHandlerClass  handler(Plugins.DynamicType(), "C4All Plugins", true, "", iconid);
+#endif
+
+      TreeTableEditClassDialog dlg(this, Plugins, handler, "Picture");
+
+      if(dlg.Execute() == SystemClass::OK){
+        forall(PluginListClass p in Plugins){
+          if(p.Represents)
+            p.Represents.Plugin.SaveSettings();
+        }
+      }
+
+      // And now re-allign the Selected value with the Plugin's Enabled property
+      forall(PluginListClass p in Plugins){
+        if(p.Represents)
+          p.Represents.Plugin.SetEnabled( p.IsSelected());
+      }
+
+      lblFormats.SetText(MyActivePlugins.GetSelected() + " / " + MyActivePlugins.myPlugins.Count() + " Plugins available");
+    }
+
+
+    // What to do is the user selects a database type
+    else if(radDatabase.Matches(event)) {
+      if(radDatabase.GetValue() == 1)
+        (new SQLDialog(this, MyOptions, MyHelp)).Execute();
+
+      else if (radDatabase.GetValue() == 2)
+        (new OdbcDialog(this, MyOptions, MyHelp)).Execute();
+
+#ifdef VERSION_8
+      // In v7 we have the ability to test for connection errors
+      if(radDatabase.GetValue() == 1 || radDatabase.GetValue() == 2)
+      {
+        DataController data = new DataController(MyOptions, MyConsole);
+        if(!data.TestConnection())
+        {
+          // Mesage the user and force them to re-enter their data
+          SystemClass::Message(SystemClass::MBOK, "Invalid database connection", "The connection details you specified didn't work.  Please check and try again.");
+          radDatabase.SetValue(0);
+        }
+      }
+#endif
+    }
+
+    // What to do if the user choose a selected files option
+    else if(radSelection.Matches(event)){
+
+#ifdef VERSION_6
+      if(radSelection.GetValue() > 0){
+        chkSlack.Enable(true);
+      } else {
+        chkSlack.Enable(false);
+        chkSlack.SetValue(false);
+      }
+#else
+      int sel = radSelection.GetValue();
+      if(sel == 1 || sel == 2){
+      //if(radSelection.GetValue() != 0){
+
+        MyOptions.ExcludeTagged = false;
+        //if(radSelection.GetValue() == 0) MyOptions.ExcludeTagged = false;
+        //if(radSelection.GetValue() == 1) MyOptions.ExcludeTagged = false;
+        if(radSelection.GetValue() == 2) MyOptions.ExcludeTagged = true;
+        //if(radSelection.GetValue() == 3) MyOptions.ExcludeTagged = false;
+        //if(radSelection.GetValue() == 4) MyOptions.ExcludeTagged = false;
+
+        // Bring up a selection window to pick the tags
+        TagDialog dlg(null, MyOptions.Case);
+        if(dlg.Execute() == SystemClass::OK)
+        {
+          MyOptions.SelectedTags.Delete(0, MyOptions.SelectedTags.Count());
+          forall(TagItemClass tag in MyOptions.Case.TagItemRoot())
+          {
+            if(tag.IsSelected())
+              MyOptions.SelectedTags.Add(tag.Name());
+          }
+          if(MyOptions.SelectedTags.Count() == 0)
+            radSelection.SetValue(0);
+        }
+        else
+        {
+          radSelection.SetValue(0);
+        }
+      }
+      else
+        MyOptions.ExcludeTagged = false;
+#endif
+    }
+  }
+}

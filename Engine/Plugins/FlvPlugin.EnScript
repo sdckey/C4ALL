@@ -1,0 +1,858 @@
+/*
+  21-Jan-2011:  Altered the SCRIPTDATAOBJECT to allow the array count to be a 'hint' but still impost
+                a 500 limit in excess of that 'hint'.  Should be permissable enough to allow valid
+                data streams and still cut off infinite loops.
+  25-Feb-2011:  Had referred to "bmp" in the Storage file.  Fixed
+*/
+
+
+include "..\\Core Files\\Interfaces\\MoviePluginInterface"
+
+class FlvPlugin;
+
+class SCRIPTDATADATE{
+  ulong  DateTime;
+  int    LocalDateTimeOffset;
+
+  SCRIPTDATADATE(EntryFileClass ef, const String &padding = ""){
+    DateTime = ef.ReadBinaryInt(8, true);
+    LocalDateTimeOffset = ef.ReadBinaryInt(2, true);
+
+    String s = padding;
+    s = s + " ";
+  }
+}
+
+class SCRIPTDATALONGSTRING{
+  long   StringLength;
+  String StringData;
+
+  SCRIPTDATALONGSTRING(EntryFileClass ef, const String &padding = ""){
+    StringLength = ef.ReadBinaryInt(4, true);
+
+    long pos = ef.GetPos();
+    ef.SetCodePage(CodePageClass::ANSI);
+    ef.ReadString(StringData, StringLength);
+    ef.Seek(pos + StringLength);
+
+    String s = padding;
+    s = s + " ";
+  }
+}
+
+
+class SCRIPTDATAVALUE{
+  int    Type;
+  long   ECMAArrayLength;
+  ulong  ScriptDataValue;
+
+  bool   isValid;
+
+  SCRIPTDATAVALUE(EntryFileClass ef, ObserverInterface _observer, bool hasName, long _flvMax, long headerOffset, const String &padding = ""){
+    isValid = true;
+
+    Type = ef.ReadBinaryInt(1, true);
+
+    if(Type == 0){
+      // Number Type (8 bytes)
+      _observer.WriteDebug("FLVplugin", padding + "           Type:  0 - Number", false);
+      ScriptDataValue = ef.ReadBinaryInt(8, true);
+      _observer.WriteDebug("FLVplugin", padding + "           Value:" + ScriptDataValue, false);
+    }
+    else if(Type == 1){
+      // Boolean type (1 byte)
+      _observer.WriteDebug("FLVplugin", padding + "           Type:  1 - Boolean", false);
+      ScriptDataValue = ef.ReadBinaryInt(1, true);
+      _observer.WriteDebug("FLVplugin", padding + "           Value:" + ScriptDataValue, false);
+    }
+    else if(Type == 2) {
+      // String type
+      _observer.WriteDebug("FLVplugin", padding + "           Type:  2 - String", false);
+      SCRIPTDATASTRING sds(ef, padding);
+      _observer.WriteDebug("FLVplugin", padding + "           Value:" + sds.StringData, false);
+    }
+    else if(Type == 3) {
+      // Object type
+      _observer.WriteDebug("FLVplugin", padding + "           Type:  3 - Object", false);
+      _observer.WriteDebug("FLVplugin", padding + "", false);
+      SCRIPTDATAOBJECT sdo(ef, _observer, _flvMax, headerOffset,  padding + "  ");
+      isValid = sdo.isValid;
+    }
+    else if(Type == 4) {
+      // MovieClip type  - a string defining the MovieClip path
+      _observer.WriteDebug("FLVplugin", padding + "           Type:  4 - MovieClip", false);
+      SCRIPTDATASTRING sds(ef, padding);
+      _observer.WriteDebug("FLVplugin", padding + "           Value:" + sds.StringData, false);
+    }
+    else if(Type == 5) {
+      // Null type
+      _observer.WriteDebug("FLVplugin", padding + "           Type:  5 - Null", false);
+      _observer.WriteDebug("FLVplugin", padding + "           Value: NULL", false);
+    }
+    else if(Type == 6) {
+      // Undefined type
+      _observer.WriteDebug("FLVplugin", padding + "           Type:  6 - Undefined", false);
+      _observer.WriteDebug("FLVplugin", padding + "           Value: Undefined", false);
+    }
+    else if(Type == 7) {
+      // Reference type
+      _observer.WriteDebug("FLVplugin", padding + "           Type:  7 - Reference", false);
+      ScriptDataValue = ef.ReadBinaryInt(2, true);
+      _observer.WriteDebug("FLVplugin", padding + "           Value:" + ScriptDataValue, false);
+    }
+    else if(Type == 8) {
+      // ECMA array type
+      _observer.WriteDebug("FLVplugin", padding + "           Type:  8 - ECMA array", false);
+      ECMAArrayLength = ef.ReadBinaryInt(4, true);
+
+      // ECMAArrayLength is just a 'hint' - the array ends when we hit 0x09...???!!$%#$^@$&@
+      _observer.WriteDebug("FLVplugin", padding + "           Value: ECM Array, hint size = " + ECMAArrayLength, false);
+      _observer.WriteDebug("FLVplugin", "", false);
+      int i;
+      bool keepWorking = true;
+      do{
+        _observer.WriteDebug("FLVplugin", padding + "             Array(" + (i+1) + " / " + ECMAArrayLength + ") at offset " + ef.GetPos(), false);
+
+        SCRIPTDATAVARIABLE sdv(ef, _observer, hasName, _flvMax, headerOffset, padding + "    ");
+        isValid = sdv.isValid;
+        i++;
+
+        if(ef.ReadBinaryInt(3, true) == 0x00009){
+          _observer.WriteDebug("FLVplugin", padding + "             SCRIPTDATAVARIABLEEND encountered at offset " + (ef.GetPos()-3) + ".  Exiting loop.", false);
+          keepWorking = false;
+        }
+        else
+          ef.Skip(-3);
+
+        // this allows invalid data streams to run for ever and ever.
+        // So to prevent this, add a 500 array member buffer and then kill it forcefully
+        if(i > (ECMAArrayLength + 500)){
+          _observer.WriteDebug("FLVplugin", padding + "              !! exceeded array 'hint' by 500 members.  treating as invalid data!!", false);
+          keepWorking = false;
+          isValid = false;
+        }
+
+        // Ensure we are still within the boundaries of the data
+        if(ef.GetPos() >= ef.GetSize())
+          keepWorking = false;
+      }
+      while(isValid && keepWorking);
+    }
+    else if(Type == 10) {
+      // Strict array type
+      _observer.WriteDebug("FLVplugin", padding + "           Type:  10 - Strict Array", false);
+      long count = ef.ReadBinaryInt(4, true);
+      _observer.WriteDebug("FLVplugin", padding + "           Value: " + count + " array members", false);
+      _observer.WriteDebug("FLVplugin", "", false);
+
+      //bool hasNames = true;
+      // check the first two bytes - if they're zeroes
+      for(int i = 0; i < count; i++){
+        _observer.WriteDebug("FLVplugin", padding + "             Array(" + (i+1) + " / " + count + ") at offset " + ef.GetPos(), false);
+        SCRIPTDATAVARIABLE sdv(ef, _observer, hasName, _flvMax, headerOffset, padding + "    ");
+        isValid = sdv.isValid;
+
+        // Ensure we are still within the boundaries of the data
+        if(ef.GetPos() >= ef.GetSize()) {
+          _observer.WriteDebug("FLVplugin", padding + "             Have moved beyond the actual data stream.  Invalid data", false);
+          isValid = false;
+        }
+
+        // Ensure we haven't exceeded the maximum size of the plugin
+        if(ef.GetPos() - headerOffset > _flvMax){
+          _observer.WriteDebug("FLVplugin", padding + "             Have exceeded the maximum file size of this plugin.  Stopping process", false);
+          isValid = false;
+        }
+
+        if(!isValid)
+          break;
+
+
+
+      }
+
+      if(ef.ReadBinaryInt(3, true) == 0x00009){
+        _observer.WriteDebug("FLVplugin", padding + "             SCRIPTDATAVARIABLEEND encountered at offset " + (ef.GetPos()-3) + ".  Exiting loop.", false);
+      }
+      else
+        ef.Skip(-3);
+    }
+    else if(Type == 11) {
+      // Date type
+      _observer.WriteDebug("FLVplugin", padding + "           Type:  11 - Date", false);
+      SCRIPTDATADATE sdd(ef, padding);
+    }
+    else if(Type == 12) {
+      // Long string type
+      _observer.WriteDebug("FLVplugin", padding + "           Type:  12 - Long string", false);
+      SCRIPTDATALONGSTRING sdls(ef, padding);
+    }
+    else {
+      _observer.WriteDebug("FLVplugin", padding + "           Type:  " + Type + " - INVALID", false);
+      isValid = false;
+    }
+
+    _observer.WriteDebug("FLVplugin", "", false);
+  }
+}
+
+class SCRIPTDATASTRING{
+  int     StringLength;
+  String  StringData;
+
+  SCRIPTDATASTRING(EntryFileClass ef, const String &padding = ""){
+    StringLength = ef.ReadBinaryInt(2, true);
+
+    long pos = ef.GetPos();
+    ef.SetCodePage(CodePageClass::ANSI);
+    ef.ReadString(StringData, StringLength);
+    ef.Seek(pos + StringLength);
+
+    String s = padding;
+    s = s + " ";
+  }
+}
+
+class SCRIPTDATAVARIABLE{
+  SCRIPTDATASTRING VariableName;
+  SCRIPTDATAVALUE  VariableData;
+
+  bool isValid;
+
+  SCRIPTDATAVARIABLE(EntryFileClass ef, ObserverInterface _observer, bool hasName, long _flvMax, long headerOffset, const String &padding = ""){
+    // some of the meta elements seem to contain values only, no names...
+    if(hasName){
+      VariableName = new SCRIPTDATASTRING(ef, padding);
+      _observer.WriteDebug("FLVplugin", padding + "           SCRIPTDATAVARIABLE Name: " + VariableName.StringData, false);
+
+      if(VariableName.StringData == "times" || VariableName.StringData == "filepositions")
+        VariableData = new SCRIPTDATAVALUE(ef, _observer, false, _flvMax, headerOffset, padding);
+      else
+        VariableData = new SCRIPTDATAVALUE(ef, _observer, true,  _flvMax, headerOffset, padding);
+    }
+    else
+      VariableData = new SCRIPTDATAVALUE(ef, _observer, hasName,  _flvMax, headerOffset, padding);
+
+    isValid = VariableData.isValid;
+  }
+}
+
+class SCRIPTDATAOBJECT{
+
+  SCRIPTDATASTRING ObjectName;
+  SCRIPTDATAVALUE  ObjectData;
+
+  bool isValid;
+
+  SCRIPTDATAOBJECT(EntryFileClass ef, ObserverInterface _observer, long _flvMax, long headerOffset, const String &padding = ""){
+    // read in the object's name
+    ObjectName = new SCRIPTDATASTRING(ef);
+    _observer.WriteDebug("FLVplugin", padding + "           SCRIPTDATAOBJECT:", false);
+    _observer.WriteDebug("FLVplugin", padding + "             Name: " + ObjectName.StringData, false);
+
+    // and then the object's data
+    if(ObjectName.StringData == "times" || ObjectName.StringData == "filepositions")
+      ObjectData = new SCRIPTDATAVALUE(ef, _observer, false, _flvMax, headerOffset,  padding + "  ");
+    else
+      ObjectData = new SCRIPTDATAVALUE(ef, _observer, true, _flvMax, headerOffset,  padding + "  ");
+
+    isValid = ObjectData.isValid;
+  }
+}
+
+typedef SCRIPTDATAOBJECT[] SCRIPTDATAOBJECTarray;
+class SCRIPTDATA{
+
+  SCRIPTDATAOBJECTarray Objects;
+  int                   End;
+  bool                  isValid;
+
+  SCRIPTDATA(EntryFileClass ef, long dataLength, ObserverInterface _observer, long _flvMax, long headerOffset){
+    Objects = new SCRIPTDATAOBJECTarray();
+    long offset = ef.GetPos();
+
+    int val;
+
+    do{
+     val = ef.ReadBinaryInt(3, true);
+     ef.Skip(-3);
+
+     SCRIPTDATAOBJECT sdo(EntryFileClass ef, _observer, _flvMax, headerOffset);
+     isValid = sdo.isValid;
+
+     if(isValid)
+       Objects.Add(sdo);
+    }
+    while(val != 9 && ef.GetPos() < offset + dataLength && isValid);
+  }
+}
+
+class VIDEODATA{
+  int    FrameType;
+  int    CodecId;
+
+  VIDEODATA(EntryFileClass ef){
+    int val = ef.ReadBinaryInt(1, true);
+
+    if(val & 0x1)
+      FrameType = FrameType + 1;
+    if(val & 0x2)
+      FrameType = FrameType + 2;
+    if(val & 0x4)
+      FrameType = FrameType + 4;
+    if(val & 0x8)
+      FrameType = FrameType + 8;
+    if(val & 0x10)
+      CodecId = CodecId + 1;
+    if(val & 0x20)
+      CodecId = CodecId + 2;
+    if(val & 0x40)
+      CodecId = CodecId + 4;
+    if(val & 0x80)
+      CodecId = CodecId + 8;
+
+    // for now, don't bother reading in the VideoData - it will be skipped as part of the Tag anyway
+  }
+
+  String GetFrameType(){
+    String s;
+    if(FrameType == 1)
+      s = "keyframe";
+    else if(FrameType == 2)
+      s = "inter frame";
+    else if(FrameType == 3)
+      s = "disposable inter frame";
+    else if(FrameType == 4)
+      s = "generated keyframe";
+    else if(FrameType == 5)
+      s = "video info/command frame";
+    else
+      s = "unknown...";
+    return s;
+  }
+
+  String GetCodecId(){
+    String s;
+    if(CodecId == 1)
+      s = "JPEG";
+    else if(CodecId == 2)
+      s = "Sorenson H.263";
+    else if(CodecId == 3)
+      s = " Screen video";
+    else if(CodecId == 4)
+      s = "On2 VP6";
+    else if(CodecId == 5)
+      s = "On2 VP6 with alpha channel";
+    else if(CodecId == 6)
+      s = "Screen video version 2";
+    else if(CodecId == 7)
+      s = "AVC";
+    else
+      s = "unknown...";
+    return s;
+  }
+}
+
+class AUDIODATA{
+  int    SoundFormat;
+  int    SoundRate;
+  int    SoundSize;
+  int    SoundType;
+  int    SoundData;
+
+  AUDIODATA(EntryFileClass ef){
+    int val = ef.ReadBinaryInt(1, true);
+    if(val & 0x1)
+      SoundType = SoundType + 1;
+    if(val & 0x2)
+      SoundSize = SoundSize + 1;
+    if(val & 0x4)
+      SoundRate = SoundRate + 1;
+    if(val & 0x8)
+      SoundRate = SoundRate + 2;
+    if(val & 0x10)
+      SoundFormat = SoundFormat + 1;
+    if(val & 0x20)
+      SoundFormat = SoundFormat + 2;
+    if(val & 0x40)
+      SoundFormat = SoundFormat + 4;
+    if(val & 0x80)
+      SoundFormat = SoundFormat + 8;
+
+    // for now, don't bother reading in the SoundData - it will be skipped as part of the Tag anyway
+  }
+
+  String GetSoundRate(){
+    String s;
+    if(SoundRate == 0)
+      s = "5.5-kHz";
+    else if(SoundRate == 1)
+      s = "1-kHz";
+    else if(SoundRate == 2)
+      s = "22-kHz";
+    else if(SoundRate == 3)
+      s = "44-kHz";
+    return s;
+  }
+
+  String GetSoundSize(){
+    String s;
+    if(SoundSize == 0)
+      s = "snd8Bit";
+    else if(SoundSize == 1)
+      s = "snd16Bit";
+    return s;
+  }
+
+  String GetSoundType(){
+    String s;
+    if(SoundType == 0)
+      s = "sndMono";
+    else if(SoundType == 1)
+      s = "sndStereo";
+    return s;
+  }
+
+  String GetSoundFormat(){
+    String s;
+    if(SoundFormat == 0)
+      s = "Linear PCM, platform endian";
+    else if(SoundFormat == 1)
+      s = "ADPCM";
+    else if(SoundFormat == 2)
+      s = "MP3";
+    else if(SoundFormat == 3)
+      s = "Linear PCM, little endian";
+    else if(SoundFormat == 4)
+      s = "Nellymoser 16-kHz mono";
+    else if(SoundFormat == 5)
+      s = "Nellymoser 8-kHz mono";
+    else if(SoundFormat == 6)
+      s = "Nellymoser";
+    else if(SoundFormat == 7)
+      s = "G.711 A-law logarithmic PCM";
+    else if(SoundFormat == 8)
+      s = "G.711 mu-law logarithmic PCM";
+    else if(SoundFormat == 9)
+      s = "reserved";
+    else if(SoundFormat == 10)
+      s = "AAC";
+    else if(SoundFormat == 14)
+      s = "MP3 8-Khz";
+    else if(SoundFormat == 15)
+      s = "Device-specific sound";
+    else
+      s = "Unknown Sound Format";
+
+    return s;
+  }
+}
+
+class FLVtag{
+  int    TagType;
+  long   DataSize;
+  long   TimeStamp;
+  int    TimeStampExtended;
+  long   StreamID;
+  //long  Data
+
+  bool   keepWorking;
+
+  FLVtag(EntryFileClass ef, ObserverInterface _observer, long _flvMax, long headerOffset){
+    keepWorking = true;
+
+    TagType = ef.ReadBinaryInt(1, true);
+    if(TagType == 8 || TagType == 9 || TagType == 18){
+      DataSize = ef.ReadBinaryInt(3, true);
+      TimeStamp = ef.ReadBinaryInt(3, true);
+      TimeStampExtended = ef.ReadBinaryInt(1, true);
+      StreamID = ef.ReadBinaryInt(3, true);
+
+      if(StreamID == 0){
+        long pos = ef.GetPos();
+
+        _observer.WriteDebug("FLVplugin", "      Tag Type:            " + TagType, false);
+        _observer.WriteDebug("FLVplugin", "      Data Size:           " + DataSize, false);
+        _observer.WriteDebug("FLVplugin", "      Time Stamp:          " + TimeStamp, false);
+        _observer.WriteDebug("FLVplugin", "      Extended Time Stamp: " + TimeStampExtended, false);
+        _observer.WriteDebug("FLVplugin", "      Stream Id:           " + StreamID, false);
+
+        if(TagType == 8){
+          // AUDIODATA
+          AUDIODATA aud(ef);
+          _observer.WriteDebug("FLVplugin", "        AUDIODATA:", false);
+          _observer.WriteDebug("FLVplugin", "          Sound Format: " + aud.GetSoundFormat(), false);
+          _observer.WriteDebug("FLVplugin", "          Sound Rate:   " + aud.GetSoundRate(), false);
+          _observer.WriteDebug("FLVplugin", "          Sound Size:   " + aud.GetSoundSize(), false);
+          _observer.WriteDebug("FLVplugin", "          Sound Type:   " + aud.GetSoundType(), false);
+        }
+        else if(TagType == 9){
+          // VIDEODATA
+          VIDEODATA vid(ef);
+          _observer.WriteDebug("FLVplugin", "        VIDEODATA:", false);
+          _observer.WriteDebug("FLVplugin", "          Frame Type: " + vid.GetFrameType(), false);
+          _observer.WriteDebug("FLVplugin", "          Codec Id:   " + vid.GetCodecId(), false);
+        }
+        else if(TagType == 18){
+          // SCRIPTDATAOBJECT
+          // not sure why yet, but there is a 0x02 here that doesn't belong...
+          ef.Skip(1);
+
+          _observer.WriteDebug("FLVplugin", "        SCRIPTDATAOBJECT:", false);
+          SCRIPTDATAOBJECT sdo(ef, _observer, _flvMax, headerOffset);
+          keepWorking = sdo.isValid;
+
+        }
+        else {
+          _observer.WriteDebug("FLVplugin", "!!FLV Tag - Tag Type invalid: " + TagType, false);
+          keepWorking = false;
+        }
+
+        _observer.WriteDebug("FLVplugin", "", false);
+        ef.Seek(pos + DataSize);
+
+      }
+      else {
+        _observer.WriteDebug("FLVplugin", "!!FLV Tag - StreamID is invalid: " + StreamID, false);
+        keepWorking = false;
+      }
+    }
+    else {
+      _observer.WriteDebug("FLVplugin", "!!FLV Tag - Tag Type invalid: " + TagType, false);
+      keepWorking = false;
+    }
+  }
+}
+
+typedef FLVtag[] FLVtagArray;
+class FLVbody{
+
+  long        PreviousTagSize;
+  FLVtagArray FLVtags;
+  long        Duration;
+
+  bool        isValid;
+
+  FLVbody(EntryFileClass ef, ObserverInterface _observer, long _flvMax, long headerOffset){
+    isValid = true;
+    FLVtags = new FLVtagArray();
+    long offset = ef.GetPos();
+
+    // the very first "previous tag size" must be zero
+    PreviousTagSize = ef.ReadBinaryInt(4, true);
+    if(PreviousTagSize == 0){
+
+      _observer.WriteDebug("FLVplugin", "  FLVbody at offset " + offset + ":", false);
+
+      int i;
+      bool keepWorking = true;
+      long lastPos;
+
+      while(keepWorking){
+        lastPos = ef.GetPos();
+
+        _observer.WriteDebug("FLVplugin", "    FLVtag(" + i + ") at offset " + lastPos + ":", false);
+
+        FLVtag tag(ef, _observer, _flvMax, headerOffset );
+        keepWorking = tag.keepWorking;
+
+        if(keepWorking){
+          FLVtags.Add(tag);
+          if(tag.TagType == 9)
+            Duration = tag.TimeStamp / 1000;
+        }
+
+        // The very first tag must have a timestamp of ZERO
+        if(i == 0 && tag.TimeStamp != 0){
+          _observer.WriteDebug("FLVplugin", "!!FLV Body - first tag had invalid TimeStamp: " + tag.TimeStamp, false);
+          keepWorking = false;
+        }
+
+        // I don't know the point in tracking the Previous Tag Size - for now just record the data
+        PreviousTagSize = ef.ReadBinaryInt(4, true);
+
+        i++;
+        //keepWorking = false;
+      }
+    }
+    else
+      _observer.WriteDebug("FLVplugin", "!!FLV Body PreviousTagSize(0) is invalid: " + PreviousTagSize, false);
+
+    if(FLVtags.Count() < 2){
+      _observer.WriteDebug("FLVplugin", "!!FLV Body contained too few tags (" + FLVtags.Count() + ") - data considered invalid", false);
+      isValid = false;
+    }
+  }
+}
+
+class FLVheader{
+  String   Signature;
+  int      Version;
+  int      TypeFlagsReserved1;
+  bool     TypeFlagsAudio;
+  bool     TypeFlagsReserved2;
+  bool     TypeFlagsVideo;
+  long     DataOffset;
+
+  FLVheader(EntryFileClass ef, ObserverInterface _observer){
+    long offset = ef.GetPos();
+
+    ef.SetCodePage(CodePageClass::ANSI);
+    ef.ReadString(Signature, 3);
+
+    if(Signature == "FLV"){
+      Version = ef.ReadBinaryInt(1, true);
+
+      int val = ef.ReadBinaryInt(1, true);
+      if(val & 0x1)
+        TypeFlagsVideo = true;
+      if(val & 0x2)
+        TypeFlagsReserved2 = true;
+      if(val & 0x4)
+        TypeFlagsAudio = true;
+      if(val & 0x8)
+        TypeFlagsReserved1 = TypeFlagsReserved1 + 1;
+      if(val & 0x10)
+        TypeFlagsReserved1 = TypeFlagsReserved1 + 2;
+      if(val & 0x20)
+        TypeFlagsReserved1 = TypeFlagsReserved1 + 4;
+      if(val & 0x40)
+        TypeFlagsReserved1 = TypeFlagsReserved1 + 8;
+      if(val & 0x80)
+        TypeFlagsReserved1 = TypeFlagsReserved1 + 16;
+
+      if(TypeFlagsReserved1 == 0 || true){
+        if(TypeFlagsReserved2 == 0){
+          DataOffset = ef.ReadBinaryInt(4, true);
+
+          _observer.WriteDebug("FLVplugin", "  FLVheader at offset " + offset + ":", false);
+          _observer.WriteDebug("FLVplugin", "    Signature:  " + Signature, false);
+          _observer.WriteDebug("FLVplugin", "    Version:    " + Version, false);
+          _observer.WriteDebug("FLVplugin", "    Has Audio:  " + TypeFlagsAudio, false);
+          _observer.WriteDebug("FLVplugin", "    Has Video:  " + TypeFlagsVideo, false);
+          _observer.WriteDebug("FLVplugin", "    DataOffset: " + DataOffset, false);
+          _observer.WriteDebug("FLVplugin", "", false);
+
+          // There shouldn't be a need to do the step below, but the FLV specification says that
+          //   future versions may contain additional data after the header but before the body,
+          //   so play it safe and skip to the reported start of the body
+          ef.Seek(offset + DataOffset);
+        }
+        else
+          _observer.WriteDebug("FLVplugin", "!!FLV Header TypeFlagsReserved2 is invalid: " + TypeFlagsReserved2, false);
+      }
+      else
+        _observer.WriteDebug("FLVplugin", "!!FLV Header TypeFlagsReserved1 is invalid: " + TypeFlagsReserved1, false);
+    }
+    else
+      _observer.WriteDebug("FLVplugin", "!!FLV Header signature is invalid: " + Signature, false);
+  }
+
+  bool IsValid(){
+    bool b = true;
+    if(Signature != "FLV") b = false;
+    //if(TypeFlagsReserved1 != 0) b = false;
+    if(TypeFlagsReserved2 != 0) b = false;
+    return b;
+  }
+}
+
+
+// Dialog Class exposing variables specific to this format
+class FlvDialog: DialogClass {
+
+  CheckBoxClass    chkFlv;
+  StaticTextClass  txtFlv;
+  LongEditClass    lngMax;
+  LongEditClass    lngMin;
+  StaticTextClass  txtAuthor;
+
+  FlvDialog(DialogClass parent, FlvPlugin flv) :
+    DialogClass    (parent, "FLV Settings:"),
+      chkFlv       (this, "Search for FLVs", 10, 10, 100, 12, 0, flv._enabled),
+      lngMin       (this, "Minimum extracted FLV size (in bytes). (0 - 10000000)", 10, 35, 100, 12, 0,
+                           flv._flvMin, 0, 10000000, WindowClass::REQUIRED),
+      lngMax       (this, "Maximum file size (bytes: 9,000 - 10,000,000,000)",     10, 95, 100, 12, 0,
+                           flv._flvMax, 9000, 10000000000, WindowClass::REQUIRED),
+
+      txtAuthor      (this, "Plugin developed by:\r\n" +
+                            "\r\n" +
+                            "Trevor Fairchild\r\n" +
+                            "Electronic Crime Section\r\n" +
+                            "Ontario Provincial Police\r\n" +
+                            "C4P@e-crime.on.ca",
+                                        175, 175, 100, 50, 0)
+  {
+  }
+}
+
+
+// Actual Format class
+class FlvPlugin:MoviePluginInterface{
+
+
+  FlvDialog         _dlg;
+
+  bool              _enabled;
+
+  double            _movieLength;
+
+  int               _headerIndex;
+
+  long              _flvMax;
+  long              _flvMin;
+  long              _rangeToIgnoreSearchHits;
+
+  String            _extension;
+  String            _header;
+  String            _metaData;
+  String            _pluginName;
+  String            _version;
+
+
+  // Plugin's Constructor, where the base values are set and any readable values
+  //   are loaded from the Storage file
+  FlvPlugin()
+  {
+    _pluginName = "C4M Plugin - FLV";
+    _enabled = true;
+    _extension = "FLV";
+    _header = "\\x46\\x4C\\x56";
+    _metaData = "";
+    _flvMax = 10000000000;  // 10 GB maximum, hard-coded.
+    _loadSettings();
+
+    _version = "1.0.0";
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("flvEnabled", _enabled);
+    myStorage.Value("flvMin", _flvMin);
+    myStorage.Value("flvMax", _flvMax);
+  }
+
+  long _validate(EntryClass e, long offset){
+
+    // Reset the classwide variables
+    _metaData = "";
+    _movieLength = 0;
+
+    long     carveSize;
+    long     searchSize;
+
+    searchSize = _flvMin + offset;
+
+    EntryFileClass ef();
+
+    #ifdef VERSION_6
+      ef.Open(e, FileClass::SLACK);
+    #else
+      ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
+    #endif
+
+    if(ef){
+      ef.Seek(offset);
+
+      // Craete a header object
+      FLVheader header(ef, _observer);
+      if(header.IsValid()){
+        FLVbody body(ef, _observer, _flvMax, offset);
+
+        if(body.isValid){
+          _movieLength = body.Duration;
+          carveSize = ef.GetPos() - offset;
+        }
+      }
+    }
+    else
+      WriteFullLine("Failed to open entry: " + e.FullPath());
+
+    if(carveSize > _flvMax){
+      WriteDebug(_pluginName, "FLV validated, but size (" + carveSize + ") exceeds format's maximum (" + _flvMax + ")", false);
+      carveSize = _flvMax;
+    }
+
+    if(carveSize < _flvMin){
+      WriteDebug(_pluginName, "FLV validated, but size (" + carveSize + ") is under the format's minimum (" + _flvMin + ")", false);
+      carveSize = -carveSize;
+    }
+
+    _rangeToIgnoreSearchHits = carveSize;
+    return carveSize;
+  }
+
+
+
+
+ // ==============================================
+  // Interface methods
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return null;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+  virtual String MetaData(){
+    return _metaData;
+  }
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new FlvDialog(parent, this);
+    return _dlg;
+  }
+  virtual long Validate(EntryClass e, long offset){
+    return _validate(e, offset);
+  }
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual double MovieLength(){
+    return _movieLength;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 51200;  // 50kb
+  }
+  // ==============================================
+}
+

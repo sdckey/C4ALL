@@ -1,0 +1,195 @@
+include "..\\Core Files\\Dialogs\\PluginListClass"
+include "..\\Core Files\\Dialogs\\AutoHandlerClass"
+include "..\\Core Files\\Dialogs\\TreeTableEditClassDialog"
+include "..\\Core Files\\Controllers\\HelpController"
+
+include "TriageValidateDialog"
+
+class TriageSearchSettings : DialogClass {
+
+  OptionsClass      MyOptions;
+  ActivePlugins     MyActivePlugins;
+  HelpController    MyHelp;
+
+
+  RadioButtonClass  radWhere;
+  RadioButtonClass  radSelected;
+
+  GroupBoxClass     grpWhat;
+    StringEditClass   txtPlugins;
+    ButtonClass       btnPlugins;
+
+  RadioButtonClass  radAfter;
+
+  GroupBoxClass     grpCase;
+    StringEditClass   txtCaseName;
+    PathEditClass     txtDbPath;
+
+  String            txtPluginsValue;
+
+  // Dialog's Return Value
+  int               ActionVal; // 0 = Cancel; 1 = ShowProgress
+
+  TriageSearchSettings(DialogClass parent, OptionsClass myOptions, HelpController myHelp, ActivePlugins myActivePlugins) :
+    DialogClass    (parent, "C4All Triage: Search for pictures and Movies"),
+      radWhere       (this, "Where would you like to search?",   10, 8, 220, 40, 0, myOptions.TriageSearchType, "Allocated Files Only (recommended Step 1)\t" +
+                                                                                                                "Unallocated Clusters Only (recommended Step 2)\t" +
+                                                                                                                "Allocated and Unallocated togeter"),
+      radSelected    (this, "How should I treat your Selected Files?", 250, 8, 180, 40, 0, myOptions.SearchSelected, "Selected Files Only\tExclude Selected Files\tDon't"),
+      grpWhat        (this, "What would you like to search for?", 10, 80, 420, 44, 0),
+        txtPlugins     (this, "Selected Plugins", 18, 94, 350, 12, 0, txtPluginsValue, 512, WindowClass::DISABLED),
+        btnPlugins     (this, "Edit", 374, 104, 44, 12, 0),
+      radAfter       (this, "What should I do afterwards?", 10, 140, 420, 80, 0, myOptions.TriageNextAction, "Validate search hits from the START of any Allocated File)\t" +
+                                                                                                             "Validate search hits from ANYWHERE in any Allocation File)\t" +
+                                                                                                             "Validate search hits from Unallocated\t" +
+                                                                                                             "Validate search hits from EVERYWHERE\t" +
+                                                                                                             "Do nothing"),
+
+      grpCase        (this, "Case / Execution Settings", 10, 236, 420, 84, 0),
+        txtCaseName    (this, "Use this Case Name:", 18, 250, 400, 12, 0, myOptions.CaseName, 512, 0),
+        txtDbPath      (this, "Build the Search Hit database file here:",   18, 286, 400, 12, 0, myOptions.ReportPath, 512, 0),
+
+
+      MyOptions = myOptions,
+      MyHelp = myHelp,
+      MyActivePlugins = myActivePlugins,
+
+      txtPluginsValue = myActivePlugins.GetSelectedAsText()
+  {
+    MyOptions.SearchSelected = 2;
+  }
+
+  virtual void Setup()
+  {
+    EditAfterOptions();
+  }
+
+  virtual bool CanClose()
+  {
+    DialogClass::CanClose();
+    ActionVal = 1;
+
+    // If the user asked to do something after the search, we need to solicit more information
+    if(radAfter.GetValue() < 4)
+    {
+      // Pre-Configure the Validate Options
+      if(MyOptions.TriageNextAction == 0)
+        MyOptions.TriageValidateAction = 0;
+      if(MyOptions.TriageNextAction == 1)
+        MyOptions.TriageValidateAction = 2;
+      if(MyOptions.TriageNextAction == 2)
+        MyOptions.TriageValidateAction = 3;
+      if(MyOptions.TriageNextAction == 3)
+        MyOptions.TriageValidateAction = 4;
+
+      // Set up the root export folder
+      MyOptions.ReportPath += "\\Search Hits\\";
+      if(!LocalMachine.PathExists(MyOptions.ReportPath))
+          LocalMachine.CreateFolder(MyOptions.ReportPath);
+      MyOptions.SqlitePath = MyOptions.ReportPath + "\\search.sqlite";
+
+      TriageValidateDialog dlg = new TriageValidateDialog(MyOptions, MyHelp, MyActivePlugins);
+      if(dlg.Execute() == SystemClass::OK)
+        return true;
+      else
+      {
+        // Let the User know that, because they failed to complete the Validation form, they will not proceed.
+        ActionVal = 0;
+        return false;
+      }
+    }
+
+    return DialogClass::CanClose();
+  }
+
+
+  virtual void ChildEvent(const EventClass &event)
+  {
+    DialogClass::ChildEvent(event);
+
+    if(btnPlugins.Matches(event))
+      EditPlugins();
+    else if(radWhere.Matches(event))
+      EditAfterOptions();
+  }
+
+  void EditAfterOptions()
+  {
+    // These choices affect the possible selections in radAfter
+    if(radWhere.GetValue() == 0)
+    {
+      // Allocated.  So you can't ask to search unallocated or everywhere afterwards
+      radAfter.EnableItem(0, true);
+      radAfter.EnableItem(1, true);
+      radAfter.EnableItem(2, false);
+      radAfter.EnableItem(3, false);
+
+      if(radAfter.GetValue() == 2 || radAfter.GetValue() == 3)
+        radAfter.SetValue(0);
+    }
+    else if(radWhere.GetValue() == 1)
+    {
+      // Unallocated, so you can't ask to search allocated files
+      radAfter.EnableItem(0, false);
+      radAfter.EnableItem(1, false);
+      radAfter.EnableItem(2, true);
+      radAfter.EnableItem(3, false);
+
+      radAfter.SetValue(2);
+    }
+    else if(radWhere.GetValue() == 2)
+    {
+      // Both, so you can ask for anything
+      radAfter.EnableItem(0, true);
+      radAfter.EnableItem(1, true);
+      radAfter.EnableItem(2, true);
+      radAfter.EnableItem(3, true);
+    }
+  }
+
+
+  void EditPlugins()
+  {
+    // On the fly, build a name list representing the plugins that are available
+    PluginListClass Plugins(null, false, "", "", null, "");
+    PluginListClass PicPlugins(Plugins, false, "C4P Plugins", "C4P Plugins", null, "");
+    PluginListClass MovPlugins(Plugins, false, "C4M Plugins", "C4M Plugins", null, "");
+
+    foreach(PluginList p in MyActivePlugins.myPlugins){
+      foreach(SymbolClass::InheritClass ic in p.Plugin.DynamicType().InheritList()){
+        if(ic.Type().Name() == "PicturePluginInterface"){
+          new PluginListClass(PicPlugins, p.Plugin.Enabled(), p.Plugin.PluginName(), p.Plugin.Extension(), p, p.Plugin.Version());
+        }
+        else if(ic.Type().Name() == "MoviePluginInterface"){
+          new PluginListClass(MovPlugins, p.Plugin.Enabled(), p.Plugin.PluginName(), p.Plugin.Extension(), p, p.Plugin.Version());
+        }
+      }
+    }
+
+    // Create a manual handler for this list, which defines how and what we will display
+#ifdef VERSION_6
+    AutoHandlerClass  handler(Plugins.DynamicType(), "C4All Plugins", true);
+#else
+    IconClass iconid;
+    AutoHandlerClass  handler(Plugins.DynamicType(), "C4All Plugins", true, "", iconid);
+#endif
+
+    TreeTableEditClassDialog dlg(this, Plugins, handler, "Picture");
+
+    if(dlg.Execute() == SystemClass::OK){
+      forall(PluginListClass p in Plugins){
+        if(p.Represents)
+          p.Represents.Plugin.SaveSettings();
+      }
+    }
+
+    // And now re-allign the Selected value with the Plugin's Enabled property
+    forall(PluginListClass p in Plugins){
+      if(p.Represents)
+        p.Represents.Plugin.SetEnabled( p.IsSelected());
+    }
+
+    txtPlugins.SetText(MyActivePlugins.GetSelectedAsText());
+  }
+
+}

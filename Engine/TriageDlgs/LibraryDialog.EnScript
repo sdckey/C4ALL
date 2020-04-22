@@ -1,0 +1,19 @@
+/*
+  Dialog to collect information about the location of a Picture Library
+*/
+
+class LibraryDialog: DialogClass{
+
+  OptionsClass     MyOptions;
+
+  StaticTextClass  txtLibrary;
+  PathEditClass    pathLibrary;
+
+  LibraryDialog(DialogClass parent, OptionsClass myOptions):
+    DialogClass(parent, "C4P Picture Library Settings:"),
+    txtLibrary(this, "Enter the root path of your Picture Library:", 10, 10, 220, 50, 0),
+    pathLibrary(this, "Set Path:", 10, 25, 220, 12, 0, myOptions.LibraryPath, WindowClass::REQUIRED),
+    MyOptions = myOptions
+  {
+  }
+}

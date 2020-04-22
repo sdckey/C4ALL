@@ -1,0 +1,68 @@
+include "AutoHandlerClass"
+include "PluginListClass"
+
+class TreeTableEditClassDialog: DialogClass {
+
+  TreeTableEditClass    lst;
+  PluginListClass  Plugins;
+  StaticTextClass  txt;
+
+  TreeTableEditClassDialog(DialogClass parent, PluginListClass plugins, AutoHandlerClass handler, const String &header):
+    DialogClass    (parent, "Available " + header + " Plugins:"),
+#ifdef VERSION_6
+      lst          (this, "Select the File Formats that you want to search for", 10, 10, 550, 250, 0, plugins, TreeTableEditClass::CANCHECK | TreeTableEditClass::CANINCLUDE,
+                    TreeTableEditClass::SHOWCOLS | TreeTableEditClass::SHOWROWS | TreeTableEditClass::SHOWROWGRID,
+                    handler),
+#else
+      lst          (this, "Select the File Formats that you want to search for", 10, 10, 550, 250, 0, plugins, ContextClass::CANCHECK | ContextClass::CANINCLUDE,
+                    TreeTableEditClass::SHOWCOLS | TreeTableEditClass::SHOWROWS | TreeTableEditClass::SHOWROWGRID,
+                    handler),
+#endif
+      txt          (this, "Double-click a Format to change / view it's settings", 30, 278, 100, 12, 0),
+
+      Plugins = plugins
+  {
+    lst.SetSplit(0.3);
+  }
+
+  virtual void ChildEvent(const EventClass &event) {
+    DialogClass::ChildEvent(event);
+
+    if(lst.Matches(event) && event.Type() == 4 ){
+      // means the user double-clicked a row
+      NodeClass n = lst.GetValue();
+      String extension = n.Name();
+
+      forall(PluginListClass plc in Plugins){
+        if(plc.Represents){
+          if(extension == plc.Represents.Plugin.Extension()){
+            DialogClass dlg = plc.Represents.Plugin.GetDialog(this);
+            if(dlg.Execute() == SystemClass::OK){
+              bool b = plc.Represents.Plugin.Enabled();
+              plc.SetSelected(b);
+              n.SetSelected(b);
+              lst.Input();
+            }
+            break;
+          }
+        }
+      }
+    }
+    else if(lst.Matches(event) && event.Type() == 1){
+      // means the user changed the checked setting
+      NodeClass n = lst.GetValue();
+      String extension = n.Name();
+
+      forall(PluginListClass plc in Plugins){
+        if(plc.Represents){
+          if(extension == plc.Represents.Plugin.Extension()){
+            bool b = n.IsSelected();
+            plc.SetSelected(b);
+            plc.Represents.Plugin.SetEnabled(b);
+            break;
+          }
+        }
+      }
+    }
+  }
+}

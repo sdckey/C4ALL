@@ -1,0 +1,20 @@
+/*
+  Dialog to collect information about what to do with Zip files.
+*/
+
+class ZipDialog: DialogClass {
+  OptionsClass    MyOptions;
+
+  StaticTextClass txtZip;
+  CheckBoxClass   chkProtected;
+
+  ZipDialog(DialogClass parent, OptionsClass myOptions) :
+    DialogClass    (parent, "Mounting Options:"),
+      txtZip       (this, "The EnScript can identify password-protected Zip volumes. These Files cannot\n" +
+                   "be mounted by EnCase. If desired, they can be copied out to a specified\n" +
+                   "folder for extra-EnCase analysis.", 10,  10, 315,  70, DEFAULT),
+      chkProtected (this, "Copy Protected Zip Volumes", 10, 100, 100, 12, 1, myOptions.CopyProtected),
+      MyOptions = myOptions
+  {
+  }
+}

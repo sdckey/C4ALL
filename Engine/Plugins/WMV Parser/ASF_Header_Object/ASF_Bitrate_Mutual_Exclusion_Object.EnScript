@@ -1,0 +1,70 @@
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+class ASF_Bitrate_Mutual_Exclusion_Object;
+
+class StreamNumber{
+  int Id;
+
+  StreamNumber(EntryFileClass ef){
+    Id = ef.ReadBinaryInt(1, false);
+  }
+}
+
+typedef StreamNumber[] StreamNumberArray;
+class ASF_Bitrate_Mutual_Exclusion_Object{
+
+  ulong  ObjectId1;
+  ulong  ObjectId2;
+  long   ObjectSize;
+  ulong  ExclusionType1;
+  ulong  ExclusionType2;
+  long   StreamNumbersCount;
+  StreamNumberArray StreamNumbers;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  ASF_Bitrate_Mutual_Exclusion_Object(const String &thePluginName, ObserverInterface theObserver){
+    StreamNumbers = new StreamNumberArray();
+
+    _pluginName = thePluginName;
+    _observer = theObserver;
+  }
+
+  void Read(EntryFileClass ef, const long &offset){
+    ef.Seek(offset);
+
+    ObjectId1 = ef.ReadBinaryInt(8, true);
+    ObjectId2 = ef.ReadBinaryInt(8, true);
+    ObjectSize = ef.ReadBinaryInt(8, false);
+
+    if(offset + ObjectSize < ef.GetSize()){
+      ExclusionType1  = ef.ReadBinaryInt(8, true);
+      ExclusionType2  = ef.ReadBinaryInt(8, true);
+      StreamNumbersCount = ef.ReadBinaryInt(2, false);
+
+      _observer.WriteDebug(_pluginName, "    ASF_Bitrate_Mutual_Exclusion_Object", false);
+      _observer.WriteDebug(_pluginName, "    =====================", false);
+      _observer.WriteDebug(_pluginName, "      Offset: " + offset, false);
+      _observer.WriteDebug(_pluginName, "      Object Size: " + ObjectSize, false);
+      _observer.WriteDebug(_pluginName, "      Stream Count: " + StreamNumbersCount, false);
+
+      for(int i = 0; i < StreamNumbersCount; i++){
+        _observer.WriteDebug(_pluginName, "        Stream Number(" + i + ")", false);
+
+        StreamNumber sn(ef);
+        StreamNumbers.Add(sn);
+
+        _observer.WriteDebug(_pluginName, "          Stream Number: " + sn.Id, false);
+      }
+
+      _observer.WriteDebug(_pluginName, "", false);
+    }
+    else {
+      _observer.WriteDebug(_pluginName, "Not enough data to read the contents of this object.", false);
+    }
+
+    ef.Seek(offset + ObjectSize);
+
+  }
+}

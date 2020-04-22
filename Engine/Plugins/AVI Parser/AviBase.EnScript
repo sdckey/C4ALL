@@ -1,0 +1,201 @@
+include"..\\..\\Core Files\\Interfaces\\ObserverInterface"
+include "..\\RIFF\\RiffBaseClass"
+include "..\\RIFF\\RiffHeader"
+include "ChunkClass"
+
+class AviBase: RiffHeader {
+
+  bool        hasHdrl;
+  bool        hasMovi;
+  bool        inMovi;
+
+  long        headerOffset;
+
+  ObserverInterface _observer;
+  String _pluginName;
+  String _metaData;
+  long   _movieLength;
+
+  AviBase(ObserverInterface theObserver, const String &thePluginName)
+  {
+    _observer = theObserver;
+    _pluginName = thePluginName;
+  }
+
+  void Recurse(EntryFileClass ef, const String &padding, long fileSize, long offset){
+    long localOffset = ef.GetPos();
+    long pos = ef.GetPos();
+    String s;
+
+    while((ef.GetPos() < (offset+fileSize+8)) && _isValid ){
+
+      // check the next four bytes - is this a LIST or a chunk?
+      pos = ef.GetPos();
+      ef.ReadString(s, 4);
+      ef.Seek(pos);
+
+      long   itemSize;
+      String itemName;
+
+      if(s == "LIST"){
+        // list
+        pos = ef.GetPos();
+        RiffBaseClass list();
+        list.Read(ef, ef.GetPos(), padding);
+        itemSize = list.fileSize;
+        itemName = list.fileName;
+        _isValid = list.IsValid();
+
+        // watch for hdrl and movi LIST types
+        if(list.fileType == "hdrl")
+          hasHdrl = true;
+        else if(list.fileType == "movi"){
+          hasMovi = true;
+          inMovi = true;
+        }
+        _observer.WriteDebug(_pluginName, padding + "LIST '" + list.fileType + "': (offset " + pos + "), size " + list.fileSize, false);
+      }
+      else {
+        // chunk
+
+        // sometimes the sub-items are off by one...
+        //String checkVal = s.SubString(1);
+        if(! ((s >= "0" && s <= "9") || (s >= "a" && s <= "z") || (s >= "A" && s <= "Z" )))
+          ef.Skip(1);
+
+        pos = ef.GetPos();
+        ChunkClass chunk();
+        chunk.Read(ef, ef.GetPos());
+        itemSize = chunk.ckSize;
+        itemName = chunk.ckId;
+        _isValid = chunk.IsValid();
+        _metaData = _metaData + chunk.MetaData;
+        if(chunk.MovieLength > 0) _movieLength = chunk.MovieLength;
+
+        //if(!inMovi)
+          _observer.WriteDebug(_pluginName, padding + "Chunk '" + chunk.ckId + "': (offset " + pos + "), size " + chunk.ckSize + ", data: '" + chunk.ckDataString + "'", false);
+      }
+
+      // be on the lookout for malformed data, whose size would exceed the header's specified size
+      long workingSize = ef.GetPos() - headerOffset - 8;
+      if(workingSize > (this.fileSize + 16)){
+
+        // if we're inside the movi element, it's possible that the movie data was only partially downloaded.  We can't resume
+        // examination of the movi items, but we can check to see if the idx1 chunk starts exactly after the movi chunk
+        bool treatAsBad = true;
+        if(inMovi){
+          ef.Seek(offset + fileSize + 8);
+          String ss;
+          ef.ReadString(ss, 4);
+          if(ss == "idx1"){
+            // this means that, even though the movi data is missing parts of it, the Index is exactly in line, and so we'll continue
+            // under the assumption that the full avi will still play
+            treatAsBad = false;
+            ef.Seek(offset + fileSize + 8);
+          }
+        }
+
+        if(treatAsBad){
+          ef.Seek(pos);
+          _observer.WriteDebug(_pluginName, padding + "!!item's size would exceed the fileSize specified in the header.  Breaking here.  itemSize: " + itemSize + " +  ef.GetPos(" + ef.GetPos() + ") - headerOffset (" + headerOffset + ") > fileSize (" + this.fileSize + ")", false);
+          _isValid = false;
+          ef.Seek(localOffset);
+        }
+      }
+      else if(itemSize > 0 && ef.GetPos() < (localOffset+itemSize+8) ){
+        //if(digDeeper)
+          Recurse(ef, padding + "  ", itemSize, localOffset);
+        //else
+        //  ef.Skip(itemSize-4);
+
+      }
+      else if(itemSize == 0 && inMovi){
+
+        // New evidence indicates that there are times when the chunk references will actually have zero byte lengths
+        // I'm not sure why, but they were very definitely accurate and valid, just zero bytes long
+        // As long as the itemSize variable has something in it, we have to trust in the technology
+        // If itemSize is empty, though, process as before:
+        if (itemName == ""){
+
+          // if we're inside the movi element, it's possible that the movie data was only partially downloaded.  We can't resume
+          // examination of the movi items, but we can check to see if the idx1 chunk starts exactly after the movi chunk
+          bool treatAsBad = true;
+          ef.Seek(offset + fileSize + 8);
+          String ss;
+          ef.ReadString(ss, 4);
+          if(ss == "idx1"){
+            // this means that, even though the movi data is missing parts of it, the Index is exactly in line, and so we'll continue
+            // under the assumption that the full avi will still play
+            treatAsBad = false;
+            _isValid = true;
+            ef.Seek(offset + fileSize + 8);
+          }
+          if(treatAsBad){
+            ef.Seek(pos);
+            _observer.WriteDebug(_pluginName, padding + "!!item's size was zero.  Breaking here.  itemSize: " + itemSize + " +  ef.GetPos(" + ef.GetPos() + ") - headerOffset (" + headerOffset + ") > fileSize (" + this.fileSize + ")", false);
+            _isValid = false;
+            ef.Seek(localOffset);
+          }
+        }
+      }
+
+      localOffset = ef.GetPos();
+    }
+    inMovi = false;
+  }
+
+  void Read(EntryFileClass ef, const long &offset, const String &padding){
+    // reset all variables first
+    hasHdrl = false;
+    hasMovi = false;
+    _isValid = true;
+    _metaData = "";
+    _movieLength = 0;
+    fileSize = 0;
+    fileName = "";
+    fileType = "";
+
+    headerOffset = offset;
+    RiffHeader::Read(ef, offset, padding);
+
+    // the RiffHeder Read method will bring us to the beginning of the data.  First, though, we need to validate this RIFF header as an AVI file
+    if(fileType == "AVI "){
+      // now cycle through the AVI file - it is a series of nested LISTS and chunks
+      _observer.WriteDebug(_pluginName, padding + "RIFF 'AVI': (offset: " + offset + "), size " + fileSize, false);
+      Recurse(ef, padding + "  ", fileSize, offset);
+
+      // afterward, check for  JUNK object
+      if(_isValid){
+        String s;
+        ef.ReadString(s, 4);
+        if(s == "JUNK"){
+          long junkSize = ef.ReadBinaryInt(4, false);
+          ef.Skip(junkSize);
+          fileSize = fileSize + junkSize + 8;
+        }
+      }
+    }
+    else {
+      _isValid = false;
+      fileSize = 0;
+      _observer.WriteDebug(_pluginName, "!! RIFF main element is NOT an AVI file", false);
+    }
+
+    // You MUST have an hdrl LIST object
+    if(!hasHdrl){
+      fileSize = 0;
+      _observer.WriteDebug(_pluginName, "!! AVI data missing the hdrl LIST object", false);
+    }
+
+    // You also MUST have a movi LIST object
+    if(!hasMovi){
+      fileSize = 0;
+      _observer.WriteDebug(_pluginName, "!! AVI data missing the movi LIST object", false);
+    }
+
+    if(ef.GetPos() - offset != fileSize){
+      // means we ended before the header said we should.  so truncate accordingly
+      fileSize = ef.GetPos() - offset;
+    }
+  }
+}

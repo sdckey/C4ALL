@@ -1,0 +1,42 @@
+include "..\\ActivePlugins"
+include "..\\Classes\\OptionsClass"
+include "..\\Core Files\\Controllers\\HelpController"
+include "TriageSearchSettings"
+
+class TriageSearchDialog : DialogClass{
+
+  TriageSearchSettings        dlgSettings;
+  DialogClass                 dlgAbout;
+
+  GroupBoxClass               grpAbout;
+  StaticTextClass             lblAbout;
+
+  TriageSearchDialog(OptionsClass myOptions, HelpController myHelp, ActivePlugins myActivePlugins) :
+    DialogClass    (null, "C4All Triage: Search for pictures and Movies"),
+      dlgSettings    (this, myOptions, myHelp, myActivePlugins),
+      dlgAbout       (this, "About"),
+      grpAbout         (dlgAbout, "What is this EnScript going to do?", 10, 10, 400, 200, 0),
+      lblAbout           (dlgAbout, "C4All Triage separates the act of searching for possible pictures and movies from the act of \n" +
+                                    "validating and extracting.  This window allows you to search your evidence for a variety of \n" +
+                                    "media formats. \n" +
+                                    "  \n" +
+                                    "Any search hit that is returned is simply logged in a small SQLite database file, complete with \n" +
+                                    "all the data necessary for subsequent validation. \n" +
+                                    "  \n" +
+                                    "By isolating the search function, we are able to break the case up into logical pieces, with the  \n" +
+                                    "goal being as quick a return as possible in getting material out for categorization. \n" +
+                                    "  \n" +
+                                    "The recommended approach: \n" +
+                                    "1: Search for Allocated Files Only \n" +
+                                    "2: Validate Live Allocated Search Hits \n" +
+                                    "3: Validate Embedded Allocated Search Hits \n" +
+                                    "4: Search Unallocated Clusters \n" +
+                                    "5: Validate Unallocated Search Hits \n" +
+                                    "  \n" +
+                                    "In doing so, you should be able to produce a C4All package for Live Allocated Search Hits in short \n" +
+                                    "order.  While this package is being categorized, you are free to build the second package for \n" +
+                                    "Embedded Allocated Search Hits.  And then, finally, the lowest priority (but not to be ignored) you \n" +
+                                    "are free to work on Unallocated Clusters without holding up the investigation.", 24, 24, 380, 100, 0)
+  {
+  }
+}

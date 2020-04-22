@@ -1,0 +1,71 @@
+include "..\\Core Files\\Controllers\\HelpController"
+include "..\\Classes\\OptionsClass"
+
+class OdbcDialog: DialogClass{
+
+  HelpController   MyHelp;
+  ButtonClass      btnHelp;
+  GroupBoxClass    grpMySQL;
+  StaticTextClass  txtBasic;
+  StringEditClass  txtName;
+  GroupBoxClass    grpManual;
+  StaticTextClass  txtAdvanced;
+  StringEditClass  txtManual;
+  StaticTextClass  txtAbout;
+  StaticTextClass  txtWarning;
+
+  OptionsClass MyOptions;
+
+
+  OdbcDialog(DialogClass parent, OptionsClass myOptions, HelpController myHelp):
+    DialogClass(parent, "Pre-Categorization Settings: ODBC"),
+
+      btnHelp      (this, "?",                      406,  14,  20,  12, 0),
+      grpMySQL     (this, "MySQL: Basic Config",     10,   8, 420,  56, 0),
+      txtBasic     (this, "To use the built-in connection string, simply provide " +
+                          "the name of the computer hosting mySQL.",
+                                                     20,  20, 380,  17, WindowClass::LEFT),
+      txtName      (this, "Computer Name:",          20,  36,  80,  12, 0, myOptions.ServerName, 32767, 0),
+
+
+      grpManual    (this, "ODBC: Manual Connection String",
+                                                     10,  70, 420, 110, 0),
+      txtAdvanced  (this, "Alternately, you can manually provide the exact " +
+                           "ODBC connection string necessary for your " +
+                           "configuration",
+                                                     20,  86, 400,  23, WindowClass::LEFT),
+      txtManual    (this, "ODBC Connection String:", 20, 110, 400,  35, 0, myOptions.ODBCstring, 32767,0),
+      txtAbout     (this, "For help on building a connection string, try this website:  http://www.connectionstrings.com",
+                                                     20, 160, 400, 12, WindowClass::CENTER),
+
+
+      txtWarning   (this, "Be advised:  if you provide BOTH a Computer Name\n" +
+                          "and a Manual ODBC Connection String the script\n" +
+                          "will IGNORE the Computer Name value",
+                                                     10, 190, 400, 24, WindowClass::CENTER),
+
+      MyOptions = myOptions,
+      MyHelp = myHelp
+  {
+    txtWarning.SetVisible(false);
+
+    if(MyOptions.ServerName.GetLength() > 0 && MyOptions.ODBCstring.GetLength() > 0)
+      txtWarning.SetVisible(true);
+
+  }
+
+  virtual void ChildEvent(const EventClass &event) {
+    DialogClass::ChildEvent(event);
+
+    if(txtName.Matches(event) || txtAdvanced.Matches(event)){
+      if(txtManual.GetText().GetLength() > 0 && txtName.GetText().GetLength() > 0)
+        txtWarning.SetVisible(true);
+      else
+        txtWarning.SetVisible(false);
+    }
+    else if(btnHelp.Matches(event)){
+      MyHelp.ShowHelp(1012);
+    }
+  }
+
+}

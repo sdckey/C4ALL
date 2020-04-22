@@ -1,0 +1,10 @@
+include "PluginInterface"
+
+class PicturePluginInterface: PluginInterface{
+
+  // Attributes specific to Picture Formats
+  pure double AspectRatio();
+  pure double BitDepth();
+
+
+}

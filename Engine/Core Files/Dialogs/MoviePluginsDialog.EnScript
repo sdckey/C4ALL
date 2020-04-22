@@ -1,0 +1,23 @@
+// This is the DialogClass that ties all of the plugin classes together
+include "..\\..\\ActivePlugins"
+include "..\\PluginList"
+
+class MoviePluginsDialog: DialogClass {
+
+  ActivePlugins MyActivePlugins;
+
+  MoviePluginsDialog(DialogClass parent, ActivePlugins myActivePlugins) :
+    DialogClass(parent, "Movie File Formats:"),
+      MyActivePlugins = myActivePlugins
+  {
+
+    foreach(PluginList p in MyActivePlugins.myPlugins){
+      foreach(SymbolClass::InheritClass ic in p.Plugin.DynamicType().InheritList()){
+        if(ic.Type().Name() == "MoviePluginInterface"){
+          DialogClass dlg = p.Plugin.GetDialog(this);
+        }
+      }
+    }
+
+  }
+}

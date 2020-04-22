@@ -1,0 +1,123 @@
+/*
+  Revisions:  added code to stop reading codecs if it exceeds the Object Size
+*/
+
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+class ASF_Marker_Object;
+
+class Marker{
+  long   Offset;
+  long   PresentationTime;
+  long   EntryLength;
+  long   SendTime;
+  long   Flags;
+  long   MarkerDescriptionLength;
+  String MarkerDescription;
+
+  ObserverInterface _observer;
+
+  Marker(EntryFileClass ef, ObserverInterface theObserver){
+    _observer = theObserver;
+    Offset = ef.ReadBinaryInt(8, false);
+    PresentationTime = ef.ReadBinaryInt(8, false);
+    EntryLength = ef.ReadBinaryInt(2, false);
+    SendTime = ef.ReadBinaryInt(4, false);
+    Flags = ef.ReadBinaryInt(4, false);
+    MarkerDescriptionLength = ef.ReadBinaryInt(4, false);
+
+    long pos = ef.GetPos();
+    ef.ReadString(MarkerDescription, MarkerDescriptionLength);
+    ef.Seek(pos + MarkerDescriptionLength);
+  }
+
+}
+
+
+typedef Marker[] MarkerArray;
+class ASF_Marker_Object{
+
+
+  ulong  ObjectId1;
+  ulong  ObjectId2;
+  long   ObjectSize;
+  ulong  Reserved1;
+  ulong  Reserved2;
+  long   MarkersCount;
+  long   Reserved3;
+  long   NameLength;
+  String Name;
+  MarkerArray Markers;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  ASF_Marker_Object(const String &thePluginName, ObserverInterface theObserver){
+    _pluginName = thePluginName;
+    _observer = theObserver;
+    Markers = new MarkerArray();
+  }
+
+  void Read(EntryFileClass ef, const long &offset){
+    ef.Seek(offset);
+
+    ObjectId1 = ef.ReadBinaryInt(8, true);
+    ObjectId2 = ef.ReadBinaryInt(8, true);
+    ObjectSize = ef.ReadBinaryInt(8, false);
+
+    if(offset + ObjectSize < ef.GetSize()){
+      Reserved1 = ef.ReadBinaryInt(8, true);
+      Reserved2 = ef.ReadBinaryInt(8, true);
+      MarkersCount = ef.ReadBinaryInt(4, false);
+      Reserved3 = ef.ReadBinaryInt(2, true);
+      NameLength = ef.ReadBinaryInt(2, false);
+
+      long pos = ef.GetPos();
+      ef.ReadString(Name, NameLength);
+      ef.Seek(pos + NameLength);
+
+      _observer.WriteDebug(_pluginName, "    ASF_Marker_Object", false);
+      _observer.WriteDebug(_pluginName, "    =====================", false);
+      _observer.WriteDebug(_pluginName, "      Offset: " + offset, false);
+      _observer.WriteDebug(_pluginName, "      Object Size: " + ObjectSize, false);
+      _observer.WriteDebug(_pluginName, "      Markers Count: " + MarkersCount, false);
+      _observer.WriteDebug(_pluginName, "      Name Length: " + NameLength, false);
+      _observer.WriteDebug(_pluginName, "      Name: " + Name, false);
+
+      // Special note:  the ObjectSize must be enforced
+      // If this is a false positive, the number of MarkerEntries could prove to be
+      // greater than the ObjectSize.
+      // If this happens, we need to cut our losses
+
+      for(int i = 0 ; i < MarkersCount; i++){
+        _observer.WriteDebug(_pluginName, "        Marker(" + i + ")", false);
+
+        Marker m(ef, _observer);
+        Markers.Add(m);
+
+/*
+        _observer.WriteDebug(_pluginName, "          Offset: " + m.Offset);
+        _observer.WriteDebug(_pluginName, "          Presentation Time: " + m.PresentationTime);
+        _observer.WriteDebug(_pluginName, "          Entry Length: " + m.EntryLength);
+        _observer.WriteDebug(_pluginName, "          Send Time: " + m.SendTime);
+        _observer.WriteDebug(_pluginName, "          Marker Description Length: " + m.MarkerDescriptionLength);
+        _observer.WriteDebug(_pluginName, "          Marker Description: " + m.MarkerDescription);
+*/
+        // Check here to ensure we are still within the bounds of the ObjectSize
+        if(ef.GetPos() > offset + ObjectSize){
+          _observer.WriteDebug(_pluginName, "Marker List exceeds the Marker Object's size.", false);
+          break;
+        }
+
+      }
+
+      _observer.WriteDebug(_pluginName, "", false);
+
+    }
+    else {
+      _observer.WriteDebug(_pluginName, "Not enough data to read the contents of this object.", false);
+    }
+
+    ef.Seek(offset + ObjectSize);
+  }
+}

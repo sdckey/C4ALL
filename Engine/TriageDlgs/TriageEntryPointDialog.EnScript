@@ -1,0 +1,125 @@
+include "..\\ActivePlugins"
+include "..\\Classes\\OptionsClass"
+include "..\\Core Files\\Controllers\\HelpController"
+
+class TriageEntryPointDialog: DialogClass {
+
+  OptionsClass      MyOptions;
+  ActivePlugins     MyActivePlugins;
+  HelpController    MyHelp;
+
+
+  StaticTextClass   lblTitle;
+  StaticTextClass   lblTitle2;
+
+  GroupBoxClass     grpMain;
+  StaticTextClass   lblSearch;
+  ButtonClass       btnSearch;
+
+  StaticTextClass   lblValidate;
+  ButtonClass       btnValidate;
+
+  ImageWindowClass  imgMain;
+
+
+  ImageClass        image;
+  int               ActionVal;  // 0 = Cancel; 1 = Search; 2 = Validate
+
+
+  TriageEntryPointDialog(DialogClass parent, OptionsClass myOptions, HelpController myHelp, ActivePlugins myActivePlugins) :
+    DialogClass    (parent, "C4All Triage Entry Point"),
+      imgMain        (this, "", 10, 10, 84, 62, ImageWindowClass::SCALE),
+      lblTitle       (this, "Welcome to the C4All v2 Triage EnScript\n" +
+                            "\n" +
+                            "Developed by:\n" +
+                            "                              Trevor Fairchild\n" +
+                            "                              Electronic Crime Section\n" +
+                            "                              Ontario Provincial Police\n" +
+                            "\n", 100, 14, 100, 12, 0),
+      lblTitle2      (this, "Please select one of the two options below:", 80, 76, 100, 12, 0),
+
+      grpMain      (this, "What would you like to do?",  10, 98, 284, 90, 0),
+      lblSearch    (this, "\"I've got a new piece of evidence, and I'd like to\"", 30, 114, 200, 12, 0),
+      btnSearch    (this, "Search for pictures and movies", 140, 126, 140, 14, 0),
+      lblValidate  (this, "\"I've already run the search.  Now I'd like to\"", 30, 150, 200, 12, 0),
+      btnValidate  (this, "Validate my Search Hits and export the results", 90, 162, 190, 14, 0),
+
+
+      MyOptions = myOptions,
+      MyHelp = myHelp,
+      MyActivePlugins = myActivePlugins
+  {
+    //CloseOnly();
+    image = GetImage();
+    imgMain.SetImage(image);
+  }
+
+  ImageClass GetImage()
+  {
+    // Isolate the folder to the EnScript
+    String scriptPath = SystemClass::ScriptPath();
+    int i = scriptPath.GetLength();
+    while(i > 0)
+    {
+      if(scriptPath.SubString(i, 1) == "\\")
+        break;
+
+      scriptPath = scriptPath.SubString(0, i);
+      i--;
+    }
+
+    String fileName = scriptPath + "\\Engine\\TriageDlgs\\logo.gif";
+    ImageClass bitmap();
+    LocalFileClass file();
+    if(file.Open(fileName))
+    {
+      if(bitmap.Read(file))
+        return bitmap;
+    }
+    return null;
+  }
+
+
+  // Called when dialog page first displays
+  virtual bool ActivateEvent()
+  {
+    return DialogClass::ActivateEvent();
+  }
+
+  // Cancel button event
+  virtual bool CanCancel()
+  {
+    return DialogClass::CanCancel();
+  }
+
+  // Called when user chooses OK
+  // Return true to allow dialog box to close
+  virtual bool CanClose()
+  {
+    return DialogClass::CanClose();
+  }
+
+  // Called each time any control changes value
+  virtual void CheckControls()
+  {
+  }
+
+
+  // Called for each child window event
+  virtual void ChildEvent(const EventClass &event)
+  {
+    DialogClass::ChildEvent(event);
+
+    if(btnSearch.Matches(event)){
+      ActionVal = 1;
+      PushOK();
+    }
+    else if(btnValidate.Matches(event)){
+      // Start up the validate dialog
+      ActionVal = 2;
+      PushOK();
+    }
+  }
+
+
+}

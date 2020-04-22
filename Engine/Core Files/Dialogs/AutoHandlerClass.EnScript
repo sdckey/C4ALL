@@ -1,0 +1,91 @@
+// This is a custom class to handle the display of plugins in a check-able list
+class AutoHandlerClass: HandlerClass {
+
+  // sub-class for a generic cell field
+  class AutoFieldClass: FieldClass {
+    PropertyClass  Prop;
+    variant        Var;
+
+    AutoFieldClass(FieldClass parent, const String &friendlyName, PropertyClass prop):
+      FieldClass(parent, friendlyName, 0, prop.Name(), prop.Name()),
+      Prop = prop
+    {
+    }
+
+    // What to do when displaying text in the cell - pad it with two spaces for readability
+    virtual String CellText(NodeClass node) {
+      Var.GetProperty(node, Prop);
+      return "   " + Var;
+    }
+  }
+
+  // sub-class for integer-based cell fields
+  class IntFieldClass: AutoFieldClass {
+    IntFieldClass(FieldClass parent, const String &friendlyName, PropertyClass prop):
+      AutoFieldClass(parent, friendlyName, prop)
+    {
+    }
+
+    virtual String CellText(NodeClass node) {
+      Var.GetProperty(node, Prop);
+      long l = Var;
+      return "   " + String::FormatInt(l, int::DECIMAL, String::COMMAS);
+    }
+  }
+
+
+  // main class Constructor
+  AutoHandlerClass(SymbolClass classType, const String &name, bool recursive, const String &plural = "", IconClass iconid = null):
+    HandlerClass(null, name, 0, classType, plural, iconid)
+  {
+    AddFields(classType, recursive);
+  }
+
+  // method to add the custom fields to the list
+  void AddFields(SymbolClass classType, bool recursive) {
+    SymbolClass::InheritClass parents = classType.InheritList();
+    if (recursive && parents){
+      foreach (SymbolClass::InheritClass parentType in parents)
+        AddFields(parentType.Type(), recursive);
+    }
+
+
+    foreach (SymbolClass member in classType){
+      if (member.IsProperty()) {
+        PropertyClass prop = PropertyClass::TypeCast(member);
+        SymbolClass   type = prop.Type();
+        if (type == typeof(short) || type == typeof(ushort) || type == typeof(int) || type == typeof(uint) || type == typeof(long)){
+          new IntFieldClass(this, FriendlyName(prop.Name()), prop);
+        }
+        else{
+          // this is where we are specifying exactly what fields we want to show in the table
+          if(prop.Name() == "PluginName"){
+             AutoFieldClass afc(this, FriendlyName(prop.Name()), prop);
+             afc.SetColWidth(30);
+          }
+          else if(prop.Name() == "Extension"){
+             AutoFieldClass afc(this, FriendlyName(prop.Name()), prop);
+             afc.SetColWidth(20);
+          }
+          else if(prop.Name() == "Version"){
+             AutoFieldClass afc(this, FriendlyName(prop.Name()), prop);
+             afc.SetColWidth(20);
+          }
+        }
+      }
+    }
+  }
+
+  static String FriendlyName(const String &name) {
+    // Turns CamelCaseNames into friendly names, e.g. "Camel Case Names"
+    String ret;
+    bool   first = true;
+    foreach (const char c in name) {
+      if (!first && char::ToLower(c) != c)
+        ret += " ";
+      ret += c;
+      first = false;
+    }
+    return ret;
+  }
+}

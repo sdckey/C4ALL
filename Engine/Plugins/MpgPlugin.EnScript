@@ -1,0 +1,1043 @@
+include "..\\Core Files\\Interfaces\\MoviePluginInterface"
+
+class MpgPlugin;
+
+class MpgDialog: DialogClass {
+  CheckBoxClass   chkMPG;
+  StaticTextClass txtMPG;
+  LongEditClass   minMPG, maxMPG;
+  StaticTextClass  txtAuthor;
+
+  MpgDialog(DialogClass parent, MpgPlugin mpg) :
+    DialogClass    (parent, "MPG Settings:"),
+      chkMPG       (this, "Search for MPGs", 10, 10, 100, 12, 0, mpg._enabled),
+      minMPG       (this, "Minimum file size (bytes: 0 - 10,000,000)", 10, 35, 100, 12, 0, mpg._mpgMin, 0, 10000000, WindowClass::REQUIRED),
+      txtMPG       (this, "90 kb = 1 second of movie (on average).  By default this script will look for movies " +
+                         "5 seconds or longer.", 10, 70, 220, 50, 0),
+      maxMPG       (this, "Maximum file size (bytes: 9,000 - 10,000,000,000)", 10, 95, 100, 12, 0, mpg._mpgMax, 9000, 10000000000, WindowClass::REQUIRED),
+      txtAuthor      (this, "Plugin developed by:\r\n" +
+                            "\r\n" +
+                            "Trevor Fairchild\r\n" +
+                            "Electronic Crime Section\r\n" +
+                            "Ontario Provincial Police\r\n" +
+                            "C4P@e-crime.on.ca",
+                                        175, 175, 100, 50, 0)
+  {
+  }
+}
+
+class MovieLengthClass{
+
+  bool isGood;
+
+  int hour;
+  int minute;
+  int second;
+  int dropFrameFlag;
+  int byte5check;
+  int frame;
+  int closed;
+  int broken;
+  int byte7check;
+
+  MovieLengthClass()
+  {
+    isGood = true;
+    hour = 0;
+    minute = 0;
+    second = 0;
+  }
+
+  String GetTimeStamp(){
+    String s;
+    if(hour = 0)
+      s = "00:";
+    else if (hour < 10)
+      s = "0" + hour + ":";
+    else
+      s = hour + ":";
+
+    if(minute == 0)
+      s = s + "00:";
+    else if (minute < 10)
+      s = s + "0" + minute + ":";
+    else
+      s = s + minute + ":";
+
+    if(second == 0)
+      s = s + "00";
+    else if (second < 10)
+      s = s + "0" + second;
+    else
+      s = s + second;
+
+    return s;
+  }
+
+  double GetSeconds(){
+    double d;
+    d = d + second;
+    d = d + (minute * 60);
+    d = d + (hour * 60 * 60);
+    return d;
+  }
+
+  bool ReadGop(int byte4, int byte5, int byte6, int byte7){
+    // identify the drop frame flag, which is bit #7 of byte #4
+    isGood = true;
+    hour = 0;
+    minute = 0;
+    second = 0;
+    dropFrameFlag = 0;
+    byte5check = 0;
+    frame = 0;
+    closed = 0;
+    broken = 0;
+    byte7check = 0;
+
+
+    if(byte4 & 0x80)
+      dropFrameFlag = 1;
+
+    // identify the hour, which is byte#4, bits 6 - 2
+    if(isGood){
+      if(byte4 & 0x4)
+        hour = hour + 1;
+      if(byte4 & 0x8)
+        hour = hour + 2;
+      if(byte4 & 0x10)
+        hour = hour + 4;
+      if(byte4 & 0x20)
+        hour = hour + 8;
+      if(byte4 & 0x40)
+        hour = hour + 16;
+
+      if(hour > 23)
+        isGood = false;
+    }
+
+    if(isGood){
+
+      // identify the minute, whicch is byte #4, bits 1 - byte #5, bit 4
+      if(byte5 & 0x10)
+        minute = minute + 1;
+      if(byte5 & 0x20)
+        minute = minute + 2;
+      if(byte5 & 0x40)
+        minute = minute + 4;
+      if(byte5 & 0x80)
+        minute = minute + 8;
+      if(byte4 & 0x1)
+        minute = minute + 16;
+      if(byte4 & 0x2)
+        minute = minute + 32;
+
+      if(minute > 59)
+        isGood = false;
+    }
+
+    if(isGood){
+
+      // read in the byte5 marker at bit 3 - must be true
+      if(byte5 & 0x8)
+        isGood = true;
+      else
+        isGood = false;
+    }
+
+    if(isGood){
+
+      // read in the second - byte #5, bit 3 - byte #6, bit 5
+      if(byte6 & 0x20)
+        second = second + 1;
+      if(byte6 & 0x40)
+        second = second + 2;
+      if(byte6 & 0x80)
+        second = second + 4;
+      if(byte5 & 0x1)
+        second = second + 8;
+      if(byte5 & 0x2)
+        second = second + 16;
+      if(byte5 & 0x4)
+        second = second + 32;
+
+      if(second > 59)
+        isGood = false;
+    }
+
+    if(isGood){
+
+      // identify the frame, which is byte #6, bit 4 - byte #7, bit 7
+      if(byte7 & 0x80)
+        frame = frame + 1;
+      if(byte6 & 0x1)
+        frame = frame + 2;
+      if(byte6 & 0x2)
+        frame = frame + 4;
+      if(byte6 & 0x4)
+        frame = frame + 8;
+      if(byte6 & 0x8)
+        frame = frame + 16;
+      if(byte6 & 0x10)
+        frame = frame + 32;
+
+      if(frame > 59)
+        isGood = false;
+    }
+
+    if(isGood){
+      // read in the closed GOP, which is byte #7, bit 6
+      if(byte7 & 0x40)
+        closed = 1;
+
+      // read in the broken GOP, which is byte #7, bit 5
+      if(byte7 & 0x20)
+        broken = 1;
+
+      // read in the reserved, which is byte #7, bits 4 - 0 = each one MUST be 0
+      if(byte7 & 0x1) isGood = false;
+      if(byte7 & 0x2) isGood = false;
+      if(byte7 & 0x4) isGood = false;
+      if(byte7 & 0x8) isGood = false;
+      if(byte7 & 0x10) isGood = false;
+    }
+
+
+    return isGood;
+  }
+
+}
+
+class MpgPlugin: MoviePluginInterface{
+
+  MpgDialog   _dlg;
+
+  bool        _enabled;
+  bool        _hasSystemHeader;
+  bool        UltraDebug;
+
+  double      _movieLength;
+
+  int         _headerIndex;
+
+  long        _mpgMax;
+  long        _mpgMin;
+  long        TotalSize;
+  long        _rangeToIgnoreSearchHits;
+
+  SearchClass  Search;
+  SearchClass  GopSearch;
+
+  String      _extension;
+  String      _header;
+  String      _metaData;
+  String      _pluginName;
+  String      _version;
+
+  MpgPlugin()
+  {
+    _pluginName = "C4M Plugin - MPG";
+    _enabled = true;
+    _extension = "MPG";
+    _header = "\\x00\\x00\\x01[\\xB3\\xBA]";
+    _metaData = "";
+    _mpgMin = 450000;
+    _mpgMax = 10000000000;
+    _loadSettings();
+
+    _version = "1.0.0";
+
+    Search = new SearchClass();
+    Search.AddKeyword("\\x00\\x00\\x01[^\\xB2]", KeywordClass::GREP);
+    Search.Create();
+
+    GopSearch = new SearchClass();
+    GopSearch.AddKeyword("\\x00\\x00\\x01\\xB8", KeywordClass::GREP);
+    GopSearch.Create();
+
+
+    // Running all the debug lines in an mpeg is suicidal.  I've pushed the 'feedback'
+    //    debug lines to a localized variabled - UltraDebug.
+    // If UltraDebug = false, then the debug data will ONLY include problems encountered.
+    // Turn UltraDebug on to get the massive outpouring of information.
+    UltraDebug = true;
+  }
+
+  ~MpgPlugin()
+  {
+    //if(GopSearch) GopSearch.Close();
+    GopSearch = null;
+
+    if(Search) Search.Close();
+    Search = null;
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("mpgEnabled", _enabled);
+    myStorage.Value("mpgMin", _mpgMin);
+    myStorage.Value("mpgMax", _mpgMax);
+  }
+
+
+  //  ISO/IEC 13818-2:  Start Code Values
+  //  ============================================
+  //  picture_start_code    =  \\x00\\x00\\x01\\x00
+  //  slice_start_code      =  \\x00\\x00\\x01\\x01 - xAF
+  //  reserved              =  \\x00\\x00\\x01\\xB0 - xB1
+  //  user_data_start_code  =  \\x00\\x00\\x01\\xB2
+  //  sequence_header_code  =  \\x00\\x00\\x01\\xB3
+  //  sequence_error_code   =  \\x00\\x00\\x01\\xB4
+  //  extension_start_code  =  \\x00\\x00\\x01\\xB5
+  //  reserved              =  \\x00\\x00\\x01\\xB6
+  //  sequence_end_code     =  \\x00\\x00\\x01\\xB7
+  //  group_start_code      =  \\x00\\x00\\x01\\xB8
+
+  //  Stream IDs
+  //  ============================================
+  //  Program End           =  \\x00\\x00\\x01\\xB9
+  //  Pack Header           =  \\x00\\x00\\x01\\xBA
+  //  System Header         =  \\x00\\x00\\x01\\xBB
+  //  Program Stream Map    =  \\x00\\x00\\x01\\xBC
+  //  Private Stream 1      =  \\x00\\x00\\x01\\xBD
+  //  Private Stream 2      =  \\x00\\x00\\x01\\xBE
+  //  Private Stream 3      =  \\x00\\x00\\x01\\xBF
+  //  MPEG-1/2 Audio Stream =  \\x00\\x00\\x01\\xC0 - xDF
+  //  MPEG-1/2 Video Stream =  \\x00\\x00\\x01\\xE0 - xEF
+  //  ECM Stream            =  \\x00\\x00\\x01\\xF0
+  //  EMM Stream            =  \\x00\\x00\\x01\\xF1
+  //  ITU-T .. .. Stream    =  \\x00\\x00\\x01\\xF2
+  //  ISO/IEC_13522 stream  =  \\x00\\x00\\x01\\xF3
+  //  ITU-T Rec - streams   =  \\x00\\x00\\x01\\xF4 - xF8
+  //  ancillary_stream      =  \\x00\\x00\\x01\\xF9
+  //  reserved              =  \\x00\\x00\\x01\\xFA - xFE
+  //  Program Stream Dir    =  \\x00\\x00\\x01\\xFF
+
+  void StreamIDs(EntryFileClass &ef, long &readInt){
+    bool validData = true;
+    bool lastWasNull;
+    int  nullCount;
+
+    do{
+      if(UltraDebug) WriteDebug(_pluginName, "StreamIDs called:", false);
+      nextbits(ef, readInt);
+
+      // 4 Null Bytes
+      if(readInt == 0x00000000) {
+        if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = NULL", false);
+
+        // increment the null count - allow 5 right now
+        if(ef.GetPos() > ef.GetSize()){
+          WriteDebug(_pluginName, "StreamIDs exceeded file size - file ignored.", false);
+          validData = false;
+        } else {
+          // allow 5 in a row
+          if(lastWasNull){
+            nullCount++;
+            if(nullCount > 5){
+              ef.Seek(ef.GetPos() - 4);
+              WriteDebug(_pluginName, "Too many NULL Streams - file ignored.", false);
+              validData = false;
+            }
+          }
+
+          lastWasNull = true;
+        }
+      } else {
+        lastWasNull = false;
+        nullCount = 1;
+
+        // Program End
+          if(readInt == 0x000001B9 ) {
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = Program End", false);
+            break;
+
+        // Pack Header...skip next 8 bytes
+          } else if(readInt == 0x000001BA) {
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = Pack Header", false);
+
+            // read the first three bytes of the data - if it's 0x210001 then this is a MPEG-PS-1 stream
+            long pos = ef.GetPos();
+            long pesHeader = ef.ReadBinaryInt(3, true);
+            ef.Seek(pos);
+            if(pesHeader == 0x210001){
+              // this is a MPEG-PS-1 stream, which is exactly 8 bytes
+              ef.Skip(8);
+            }
+            else {
+              // this is a MPEG-PS-2 stream, which is a minimum of 10 bytes
+              ef.Skip(9);
+
+              // the tenth byte has 3 bits that indicate how many "padding" bytes follow the packet
+              long lastByte = ef.ReadBinaryInt(1, true);
+              int padding;
+              if(lastByte & 0x1)
+                padding = padding + 1;
+              if(lastByte & 0x2)
+                padding = padding + 2;
+              if(lastByte & 0x4)
+                padding = padding + 4;
+              ef.Skip(padding);
+            }
+
+        // System Header...read 2 bytes and skip the value
+          } else if(readInt == 0x000001BB) {
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = System Header", false);
+            readInt = ef.ReadBinaryInt(2, FileClass::BIGENDIAN);
+            ef.Skip(readInt);
+            _hasSystemHeader = true;
+
+        // Program Stream Map
+          } else if(readInt == 0x000001BC){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = Stream Map", false);
+
+        // Private Stream 1...read 2 bytes and skip the value
+          } else if(readInt == 0x000001BD){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = Private Stream 1", false);
+            ef.Skip(ef.ReadBinaryInt(2, FileClass::BIGENDIAN));
+
+        // Private Stream 2...read 2 bytes and skip the value
+          } else if(readInt == 0x000001BE){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = Private Stream 2", false);
+            ef.Skip(ef.ReadBinaryInt(2, FileClass::BIGENDIAN));
+
+        // Private Stream 3...read 2 bytes and skip the value
+          } else if(readInt == 0x000001BF ){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = Private Stream 3", false);
+            ef.Skip(ef.ReadBinaryInt(2, FileClass::BIGENDIAN));
+
+        // MPEG-1/2 Audio Stream...read 2 bytes and skip the value
+          } else if(readInt >= 0x000001C0 && readInt <=  0x000001C1 ){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = MPEG-1/2 Audio Stream", false);
+            ef.Skip(ef.ReadBinaryInt(2, FileClass::BIGENDIAN));
+
+        // MPEG-1/2 Video Stream...read 2 bytes and skip the value
+          } else if(readInt >= 0x000001E0 && readInt <= 0x000001EF){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = MPEG-1/2 Video Stream", false);
+            ef.Skip(ef.ReadBinaryInt(2, FileClass::BIGENDIAN));
+
+        // ECM Stream
+          } else if(readInt == 496){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = ECM Stream", false);
+
+        // EMM Stream
+          } else if(readInt == 497){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = EMM Stream", false);
+
+        // ITU-T Stream
+          } else if(readInt == 498){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = ITU-T Stream", false);
+
+        // ISO/IEC stream
+          } else if(readInt == 499){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = ISO/IEC stream", false);
+
+        // ITU-T streams
+          } else if(readInt >= 500 && readInt <= 504){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = ITU-T streams", false);
+
+        // ancillary_stream
+          } else if(readInt == 505){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = ancillary_stream", false);
+
+        // reserved
+          } else if(readInt >= 506 && readInt <= 510){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = reserved", false);
+
+        // Program Stream Directory
+          } else if(readInt == 511){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = Program Stream Directory", false);
+
+        // New MPG header items:
+          } else if(readInt == 0x1BE0902){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = New 0x01BE0902", false);
+          } else if(readInt == 0x1C00902){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = New 0x01C00902", false);
+          } else if(readInt == 0x1E00902){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = New 0x01E00902", false);
+
+        // Otherwise...
+          } else {
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  INVALID mpg header.  readInt = " + readInt, false);
+            validData = false;
+          }
+      }
+
+    } while(validData && ef.GetPos() < ef.GetSize());
+  }
+
+  bool slice_11172(EntryFileClass &ef, long &readInt){
+
+    if(readInt <= 0x000001AF){
+      if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = slice_start_code", false);
+
+      UseSearch(ef);
+
+    } else {
+      WriteDebug(_pluginName, "Invalid slice entry for some reason...", false);
+      return false;
+    }
+
+    return true;
+  }
+
+  bool picture_11172(EntryFileClass &ef, long &readInt){
+    if(readInt == 0x00000100){
+      WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = picture_start_code", false);
+
+      // skip 3 bytes
+      ef.Skip(3);
+
+      // read through until you hit another start code marker
+      if(UseSearch(ef)){
+  /*      while(ef.ReadBinaryInt(3, FileClass::BIGENDIAN) != 0x000001){
+          ef.Seek(ef.GetPos() - 2);
+        }
+        ef.Seek(ef.GetPos() - 3);
+  */
+
+
+        if(nextbits(ef, readInt) == 0x000001B5){
+          if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = extension_start_code", false);
+          // extension_start_code
+          UseSearch(ef);
+  /*
+          while(ef.ReadBinaryInt(3, FileClass::BIGENDIAN) != 0x000001){
+            ef.Seek(ef.GetPos() - 2);
+          }
+          ef.Seek(ef.GetPos() - 3);
+  */
+          nextbits(ef, readInt);
+        }
+
+        if( readInt == 0x000001B2){
+          if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = user_data_start_code", false);
+
+          // user_data_start_code
+          UseSearch(ef);
+  /*
+          while(ef.ReadBinaryInt(3, FileClass::BIGENDIAN) != 0x000001){
+            // ..ignored until another start code is encountered...
+            ef.Seek(ef.GetPos() - 2);
+          }
+          ef.Seek(ef.GetPos() - 3);
+  */
+          nextbits(ef, readInt);
+        }
+
+        do{
+          if(!slice_11172(ef, readInt)){
+            WriteDebug(_pluginName, "Invalid Slice encountered.", false);
+            return false;
+          }
+        } while( (ef.ReadBinaryInt(3, FileClass::BIGENDIAN) == 0x000001 && ef.ReadBinaryInt(1) <= 175)
+                  && (ef.GetPos() < ef.GetSize()) );
+        ef.Seek(ef.GetPos() - 4);
+      } else {
+        return false;
+      }
+
+    } else {
+      WriteDebug(_pluginName, "pictures_11172 - header not present.  Data ignored.", false);
+      return false;
+    }
+
+    return true;
+  }
+
+  bool group_of_pictures_11172(EntryFileClass &ef, long &readInt){
+    // By this point, readInt should be the gop header
+    if(readInt == 0x000001B8){
+      if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = group_start_code", false);
+
+      // skip 4 bytes and read in next 4
+      ef.Skip(4);
+
+      if(nextbits(ef, readInt) == 0x000001B5){
+        if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = extension_start_code", false);
+        // extension_start_code
+        UseSearch(ef);
+/*
+        while(ef.ReadBinaryInt(3, FileClass::BIGENDIAN) != 0x000001){
+          ef.Seek(ef.GetPos() - 2);
+        }
+        ef.Seek(ef.GetPos() - 3);
+*/
+        nextbits(ef, readInt);
+      }
+
+      if( readInt == 0x000001B2){
+        if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = user_data_start_code", false);
+
+        // user_data_start_code
+        UseSearch(ef);
+/*
+        while(ef.ReadBinaryInt(3, FileClass::BIGENDIAN) != 0x000001){
+          // ..ignored until another start code is encountered...
+          ef.Seek(ef.GetPos() - 2);
+        }
+        ef.Seek(ef.GetPos() - 3);
+*/
+        nextbits(ef, readInt);
+      }
+
+      do{
+        if(!picture_11172(ef, readInt)){
+          WriteDebug(_pluginName, "Invalid picture found.", false);
+          return false;
+        }
+      } while(nextbits(ef, readInt) == 0x00000100);
+
+      ef.Seek(ef.GetPos() - 4);
+
+
+    } else {
+      WriteDebug(_pluginName, "group_of_pictures_11172 - header not present.  Data ignored. (" + readInt + ")", false);
+      return false;
+    }
+
+    return true;
+  }
+
+  bool UseSearch(EntryFileClass &ef){
+    long lastPos = ef.GetPos();
+    long searchLength = 20000;
+
+    long result;
+    result = Search.Find(ef, searchLength, 1, SearchClass::STATUSUPDATE);
+    SearchClass::HitArrayClass hits = Search.GetHits();
+
+    if(hits.Count() > 0){
+      forall (SearchClass::HitClass h in hits) {
+        ef.Seek(h.Offset());
+      }
+      return true;
+    } else {
+      WriteDebug(_pluginName, "No Start Code Header found.  EOF = " + (lastPos - 3), false);
+      ef.Seek(lastPos-3);
+      return false;
+    }
+  }
+
+  bool sequence_header_11172(EntryFileClass &ef, long &readInt){
+    if(readInt == 0x000001B3){
+      if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = sequence_header_code", false);
+
+      // skip over first 7 bytes
+      ef.Skip(7);
+
+      // read in 1 byte
+      readInt = ef.ReadBinaryInt(1);
+
+      // 2nd bit in determines if there is a load_intra_quantiser_matrix, and skip 64 bits
+      if(readInt & 0x2){
+        ef.Skip(64);
+
+        // then load in byte
+        readInt = ef.ReadBinaryInt(1);
+      }
+
+      // 1st bit in determines if there is a load_non_intra_quantiser_matrix, and skip 64 bytes
+      if(readInt & 0x1){
+        ef.Skip(64);
+      }
+
+      nextbits(ef, readInt);
+      if( readInt == 0x000001B5){
+        if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = extension_start_code", false);
+
+        // extension_start_code
+        UseSearch(ef);
+/*
+        while(ef.ReadBinaryInt(3, FileClass::BIGENDIAN) != 0x000001){
+          ef.Seek(ef.GetPos() - 2);
+        }
+        ef.Seek(ef.GetPos() - 3);
+*/
+        nextbits(ef, readInt);
+      }
+
+      if( readInt == 0x000001B2){
+        if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = user_data_start_code", false);
+
+        // user_data_start_code
+        UseSearch(ef);
+/*
+        while(ef.ReadBinaryInt(3, FileClass::BIGENDIAN) != 0x000001){
+          // ..ignored until another start code is encountered...
+          ef.Seek(ef.GetPos() - 2);
+        }
+        ef.Seek(ef.GetPos() - 3);
+*/
+        nextbits(ef, readInt);
+      }
+
+      return true;
+    } else {
+      WriteDebug(_pluginName, "data does not match sequence_header_code", false);
+      return false;
+    }
+  }
+
+  bool ISO11172(EntryFileClass &ef, long &readInt){
+    WriteDebug(_pluginName, "ISO11172-2 Called:", false);
+
+    nextbits(ef, readInt);
+    do{
+      if(!sequence_header_11172(ef, readInt)){
+        WriteDebug(_pluginName, "Invalid sequence_header encountered.", false);
+        return false;
+      }
+
+      do{
+        if(!group_of_pictures_11172(ef, readInt)){
+          WriteDebug(_pluginName, "Invalid group_of_pictures found.", false);
+          return false;
+        }
+      } while (nextbits(ef, readInt) == 0x000001B8);
+      ef.Seek(ef.GetPos() - 4);
+
+    } while (nextbits(ef, readInt) == 0x000001B4);
+    ef.Seek(ef.GetPos() - 4);
+    //sequence_end_code;
+
+    return true;
+  }
+
+  bool ISO13818(EntryFileClass &ef, long &readInt){
+    WriteDebug(_pluginName, "ISO13818-2 Called:", false);
+
+    // video_sequence(){
+         nextbits(ef, readInt);
+    //   sequence_header();
+    //   if(nextbits() == extension_start_code){
+    //      sequence_extension();
+    //      do{
+    //        extension_and_user_data(0)
+    //        do{
+    //          if(nextbits() == group_start_code){
+    //            group_of_pictures_header()
+    //            extension_and_user_data(1)
+    //          }
+    //          picture_header()
+    //          picture_coding_extension()
+    //          extension_and_user_data(2)
+    //          picture_data()
+    //        } while ((nextbits() == picture_start_code) || (nextbits() == group_start_code))
+    //
+    //        if(nextbits() != sequence_end_code){
+    //          sequence_header()
+    //          sequence_extension()
+    //        }
+    //
+    //      } while (nextbits() != sequence_end_code)
+    //   } else {
+    //     ==> ISO 11172-2
+    //   }
+    //   sequence_end_code
+    // }
+
+
+    return true;
+  }
+
+  bool sequence_header_13818(EntryFileClass &ef, long &readInt){
+    if(readInt == 0x000001B3){
+      if(UltraDebug) WriteDebug(_pluginName, "Offset: " + (ef.GetPos()-4) + ".  Type = sequence_header_code", false);
+
+      // skip over first 7 bytes
+      ef.Skip(7);
+
+      // read in 1 byte
+      readInt = ef.ReadBinaryInt(1);
+
+      // 2nd bit in determines if there is a load_intra_quantiser_matrix, and skip 64 bytes
+      if(readInt & 0x2){
+        if(UltraDebug) WriteDebug(_pluginName, "load_intra_quantiser_matrix encountered - skipping 64 bytes", false);
+        ef.Skip(64);
+
+        // then load in byte
+        readInt = ef.ReadBinaryInt(1);
+      }
+
+      // 1st bit in determines if there is a load_non_intra_quantiser_matrix, and skip 64 bytes
+      if(readInt & 0x1){
+        if(UltraDebug) WriteDebug(_pluginName, "load_non_intra_quantiser_matrix encountered - skipping 64 bytes", false);
+        ef.Skip(64);
+      }
+
+      return true;
+
+    } else {
+      WriteDebug(_pluginName, "Invalid Sequence Header", false);
+      return false;
+    }
+  }
+
+  bool GetVideo(EntryFileClass &ef, long &readInt){
+
+    bool validData;
+    validData = true;
+
+    WriteDebug(_pluginName, "GetVideo called at Offset " + ef.GetPos(), false);
+
+    // == VIDEO_SEQUENCE ==========================================================================================
+
+    // There are 2 ISO/IEC standards that apply to MPG.  Both have similar but not identical structures.
+    // This script assumes ISO 13818 at the beginning.  The content of the sequence_header will determine
+    // which ISO will be applied.  Once this determination is made, then the file pointer is reset to the
+    // beginning of the video_sequence routine
+
+    long vidOffset = ef.GetPos() - 4;
+    WriteDebug(_pluginName, "vidOffset = " + vidOffset, false);
+
+    // evaluate the sequence_header (00 00 01 B3)
+    if(sequence_header_13818(ef, readInt)){
+      nextbits(ef, readInt);
+
+      if(readInt == 437) { // extension_start_code
+        ef.Seek(vidOffset);
+        if(!ISO13818(ef, readInt))
+          return false;
+      } else {
+        ef.Seek(vidOffset);
+        if(!ISO11172(ef, readInt)){
+          WriteDebug(_pluginName, "sequence_header_13818 failed.", false);
+          return false;
+        }
+      }
+
+      return true;
+    } else {
+      WriteDebug(_pluginName, "sequence_header_13818 failed.", false);
+      return false;
+    }
+  }
+
+  long nextbits(EntryFileClass &ef, long &readInt){
+    readInt = ef.ReadBinaryInt(4, FileClass::BIGENDIAN);
+    return readInt;
+  }
+
+  long _validate(EntryClass e, long offset){
+
+    _metaData = "";
+    _movieLength = -1;
+    _hasSystemHeader = false;
+
+    WriteDebug(_pluginName, "ValidateMPG called at offset: " + offset, false);
+
+    EntryFileClass ef();
+
+    #ifdef VERSION_6
+      ef.Open(e, FileClass::SLACK);
+    #else
+      ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
+    #endif
+
+    if(ef){
+
+      // 1. Open the File and set Code page
+      ef.Seek(offset);
+      ef.SetCodePage(CodePageClass::ANSI);
+
+      // 2. Read in the first 4 bytes - what header was returned?
+      //    If it is the sequence header code, then continue
+      //    otherwise - process as a pack header file
+      long readInt;
+      nextbits(ef, readInt);
+
+      if (readInt == 0x000001B3 ) {  // 0x000001B3 (sequence_header_code)
+        long vidCount;
+
+        do{
+          WriteDebug(_pluginName, "Entering Primary Loop", false);
+          WriteDebug(_pluginName, "=====================", false);
+          WriteDebug(_pluginName, "Sequence Header Code found", false);
+          WriteDebug(_pluginName, "..Processing data at:" + (ef.GetPos() - 4), false);
+
+          if(!GetVideo(ef, readInt)){
+            if(vidCount == 0){
+              WriteDebug(_pluginName, "No Video found - file ignored.", false);
+              TotalSize = 0;
+              break;
+            }
+
+            // do something - it doesn't necessarily mean that the file failed
+            WriteDebug(_pluginName, "GetVideo function failed - end of file = " + ef.GetPos() , false);
+            TotalSize = ef.GetPos() - offset;
+            break;
+          }
+
+          nextbits(ef, readInt);
+          vidCount++;
+
+          // check for stream footer
+          if(readInt == 0x000001B7){
+            WriteDebug(_pluginName, "Sequence_end_footer found - end of file = " + ef.GetPos() , false);
+            TotalSize = ef.GetPos() - offset;
+          }
+
+        } while ( ef.GetPos() <= ef.GetSize());
+
+        if(vidCount > 0){
+          WriteDebug(_pluginName, "Pack Header MPG validated.  File Size = " + (ef.GetPos() - offset), false);
+          TotalSize = ef.GetPos() - offset;
+
+        } else {
+          WriteDebug(_pluginName, "Pack Header MPG validated, but no Video found - file ignored.", false);
+          TotalSize = 0;
+        }
+
+      } else if (readInt == 0x000001BA) {
+        // This method will jump through the file until the logical conclusion
+        ef.Seek(ef.GetPos() - 4);
+        StreamIDs(ef, readInt);
+
+        WriteDebug(_pluginName, "Pack Header MPG validated.  File Size = " + (ef.GetPos() - offset), false);
+        TotalSize = ef.GetPos() - offset;
+
+      } else {
+        WriteDebug(_pluginName, "You supplied an invalid header!", false);
+        TotalSize = 0;
+
+      }
+
+    } else {
+      WriteDebug(_pluginName, "MPG - Could not Open entry!!", false);
+      TotalSize = 0;
+    }
+
+
+    if(TotalSize != 0){
+      // to deal with partially downloaded movies, if the offset is 0 and the file is good, then
+      //  just take the logical size
+      if(offset == 0 &! e.IsUnallocated()){
+        WriteDebug(_pluginName, "MPG validated (size = " + TotalSize + ").  Given the search hit was at offset 0, using the entry's Logical Size instead (" + e.LogicalSize() + ")", false);
+        TotalSize = e.LogicalSize();
+      }
+    }
+
+    if(TotalSize > _mpgMax){
+      WriteDebug(_pluginName, "MPG Validated but size (" + TotalSize + ") exceeds format maximum of " + _mpgMax, false);
+      TotalSize = _mpgMax;
+    }
+
+    if(TotalSize < _mpgMin){
+      WriteDebug(_pluginName, "MPG Validated but size (" + TotalSize + ") is under the format minimum of " + _mpgMin, false);
+      TotalSize = 0;
+    }
+/*
+//  This has been a long debate with me, but I've found data streams without a system header that VLC can nevertheless play
+//  The ISO standards say you have to have one, and commenting out the below WILL result in bad movies coming out, but
+//    the fact remains that partial movies may still be playable in VLC...
+
+    if(!_hasSystemHeader){
+      WriteDebug(_pluginName, "MPG Validated but is missing System Header.", false);
+      // Skip this data, because we've already checked it once
+      TotalSize = -TotalSize;
+    }
+*/
+
+    if(TotalSize > 0){
+      long result;
+      ef.Seek(offset);
+      result = GopSearch.Find(ef, TotalSize, -1, SearchClass::STATUSUPDATE);
+      SearchClass::HitArrayClass hits = GopSearch.GetHits();
+
+
+      if(hits.Count() > 0){
+        MovieLengthClass mlc();
+
+        forall (SearchClass::HitClass h in hits) {
+          ef.Seek(h.Offset());
+
+          // Skip over the header
+          ef.Skip(4);
+
+          // Read in the time stamp;
+          if(mlc.ReadGop(ef.ReadBinaryInt(1), ef.ReadBinaryInt(1), ef.ReadBinaryInt(1), ef.ReadBinaryInt(1))){
+            if(UltraDebug) WriteDebug(_pluginName, "Offset: " + h.Offset() + " :: GOP Time Stamp: " + mlc.GetTimeStamp(), false);
+            _movieLength = mlc.GetSeconds();
+          }
+        }
+      }
+    }
+
+    _rangeToIgnoreSearchHits = TotalSize;
+    return TotalSize;
+  }
+
+
+
+
+  // ==============================================
+  // Interface methods
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return null;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+  virtual String MetaData(){
+    return _metaData;
+  }
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new MpgDialog(parent, this);
+    return _dlg;
+  }
+  virtual long Validate(EntryClass e, long offset){
+    return _validate(e, offset);
+  }
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual double MovieLength(){
+    return _movieLength;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 102400;  // 100kb
+  }
+  // ==============================================
+}

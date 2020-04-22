@@ -1,0 +1,174 @@
+include "..\\Core Files\\Interfaces\\PicturePluginInterface"
+include "GifBase"
+
+class GifPlugin;
+
+
+// Dialog Class exposing variables specific to this format
+class GifDialog: DialogClass {
+
+  CheckBoxClass   chkGIF;
+  LongEditClass   lngGIF;
+  StaticTextClass txtGIF;
+  StaticTextClass  txtAuthor;
+
+  GifDialog(DialogClass parent, GifPlugin gif) :
+    DialogClass    (parent, "GIF Settings:"),
+      chkGIF       (this, "Search for GIFs", 10, 10, 100, 12, 0, gif._enabled),
+      lngGIF       (this, "Maximum allowed GIF size (bytes: 0 - 100,000,000)", 10, 115, 100, 12, 0,
+                                                gif._gifMax, 0, 100000000, WindowClass::REQUIRED),
+      txtGIF       (this, "All GIF Files will be exported based on either the termination point of the image, or the " +
+                   "point at which valid GIF data ceases.", 10,  25,  220,  50, 0),
+      txtAuthor      (this, "Plugin developed by:\r\n" +
+                            "\r\n" +
+                            "Trevor Fairchild\r\n" +
+                            "Electronic Crime Section\r\n" +
+                            "Ontario Provincial Police\r\n" +
+                            "C4P@e-crime.on.ca",
+                                        175, 175, 100, 50, 0)
+  {
+  }
+}
+
+
+// Actual Format class, which implements the PicturePluginInterface
+class GifPlugin:PicturePluginInterface{
+
+
+  GifDialog         _dlg;
+
+  bool              _enabled;
+
+  double            _aspectRatio;
+  double            _bitDepth;
+
+  int               _headerIndex;
+
+  long              _gifMax;
+  long              _gifMin;
+  long              _rangeToIgnoreSearchHits;
+
+  String            _extension;
+  String            _header;
+  String            _metaData;
+  String            _pluginName;
+  String            _version;
+
+
+  // Plugin's Constructor, where the base values are set and any readable values
+  //   are loaded from the Storage file
+  GifPlugin()
+  {
+    _pluginName = "C4P Plugin - GIF";
+    _enabled = true;
+    _extension = "GIF";
+    _header = "GIF8[97]a"; //"\\x47\\x49\\x46\\x38[\\x39\\x37]\\x61";
+    _metaData = "";
+    _loadSettings();
+    _gifMin = 0;
+    _gifMax = 20000000;
+
+    _version = "1.0.2";
+  }
+
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("gifEnabled", _enabled);
+    myStorage.Value("gifMin", _gifMin);
+    myStorage.Value("gifMax", _gifMax);
+  }
+
+
+  // =======================================================================================
+  // Interface Functions that MUST be present and SHOULD tie in with the rest of your script
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return null;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+
+  virtual String MetaData(){
+    return _metaData;
+  }
+
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new GifDialog(parent, this);
+    return _dlg;
+  }
+
+  virtual long Validate(EntryClass e, long offset){
+    GifBase gifBase(_observer);
+    gifBase._gifMax = _gifMax;
+    gifBase._gifMin = _gifMin;
+
+    long length = gifBase._validate(e, offset);
+    _rangeToIgnoreSearchHits = length;
+    return length;
+  }
+
+  virtual double AspectRatio(){
+    return _aspectRatio;
+  }
+
+  virtual double BitDepth(){
+    return _bitDepth;
+  }
+
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 10240;  // 10kb
+  }
+  // =======================================================================================
+}
+
+
+

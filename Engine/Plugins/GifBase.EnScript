@@ -1,0 +1,584 @@
+/*
+  version 1.0.1:  Added validation when reading the LWZ Minimum Code Size value = this value should be less than 12 and should actually match the number
+                  of bits required to access any part of the Global or Local Color Table.  Huge values are just wrong (but not technically illegal).
+  version 1.0.1:  Added support for 1-bit GIF
+*/
+
+include "..\\Core Files\\Interfaces\\ObserverInterface"
+
+class GifBase{
+
+  bool              _keepLooking;
+  double            _aspectRatio;
+  double            _bitDepth;
+
+  long              _gifMax;
+  long              _gifMin;
+
+  ObserverInterface _observer;
+
+  String            _metaData;
+
+  GifBase(ObserverInterface theObserver)
+  {
+    _observer = theObserver;
+  }
+
+
+  long _validate(EntryClass e, long offset){
+    EntryFileClass ef();
+
+    #ifdef VERSION_6
+      ef.Open(e, FileClass::SLACK);
+    #else
+      ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
+    #endif
+
+    ef.SetCodePage(CodePageClass::ANSI);
+    ef.Seek(offset);
+
+    return _validate(ef, offset);
+  }
+
+  long _validate(FileClass ef, long offset){
+
+    // Reset the classwide variables
+    _aspectRatio = 0;
+    _bitDepth = 0;
+    _metaData = "";
+
+
+    bool     firstPictureValid,
+             gifPageFailed;
+    double   colorTableCount;
+    int      imgWidth,
+             imgHeight;
+    long     carveSize,
+             searchSize;
+    String   gifVersion;
+
+    _aspectRatio = 0;
+    _bitDepth = 0;
+
+    searchSize = _gifMax + offset;
+
+
+    _observer.WriteDebug("GifClass", "Validate Commence", true);
+    _keepLooking = true;
+
+    // **************************************************************************************************************
+    //HEADER BLOCK                            -- MANDATORY - will either be "GIF87a" or "GIF89a"
+    String s;
+    ef.ReadString(s, 3);
+    ef.ReadString(gifVersion, 3);
+    _observer.WriteDebug("GifClass", "GIF Header Block:", true);
+    _observer.WriteDebug("GifClass", "=====================", true);
+    _observer.WriteDebug("GifClass", "ID Value \"" + s + gifVersion + "\" at offset " + (ef.GetPos() - 6) , true);
+
+    // **************************************************************************************************************
+    //LOGICAL SCREEN DESCRIPTOR
+    _observer.WriteDebug("GifClass", "", true);
+    _observer.WriteDebug("GifClass", "Logical Screen Descriptor:", true);
+    _observer.WriteDebug("GifClass", "=====================", true);
+
+    // ScreenWidth
+    imgWidth = ef.ReadBinaryInt(2, false);
+    _observer.WriteDebug("GifClass", "Image Width: " + imgWidth, true);
+
+    // ScreenHeight
+    imgHeight = ef.ReadBinaryInt(2, false);
+    _observer.WriteDebug("GifClass", "Image Height: " + imgHeight, true);
+
+    // Packed Byte (packed, BackgroundColor, AspectRatio) - bits 0-2 contain the aspect ratio
+    int tempByte = ef.ReadBinaryInt(1, false);
+    _bitDepth = 1;
+
+    // Size of Global Color Table
+    if(tempByte & 0x01)
+      _bitDepth = _bitDepth + 1;
+    if(tempByte & 0x02)
+      _bitDepth = _bitDepth + 2;
+    if(tempByte & 0x04)
+      _bitDepth = _bitDepth + 4;
+
+    // Color Table Sort Flag
+    int ctsFlag;
+    if(tempByte & 0x08)
+      ctsFlag = 1;
+
+    // Color Resolution
+    int colRes = 1;
+    if(tempByte & 0x10)
+      colRes = colRes + 1;
+    if(tempByte & 0x20)
+      colRes = colRes + 2;
+    if(tempByte & 0x40)
+      colRes = colRes + 4;
+
+    // Global Color Table Flag
+    int gctFlag;
+    if(tempByte & 0x80)
+      gctFlag = 1;
+
+    _observer.WriteDebug("GifClass", "Packed Byte: " + tempByte, true);
+    _observer.WriteDebug("GifClass", "  > bit 0-2, Global Color Table Size: " + _bitDepth, true);
+    _observer.WriteDebug("GifClass", "  > bit   3, Color Table Sort Flag:   " + ctsFlag, true);
+    _observer.WriteDebug("GifClass", "  > bit 4-6, Color Resolution:        " + colRes, true);
+    _observer.WriteDebug("GifClass", "  > bit   7, Global Color Table Flag: " + gctFlag, true);
+
+    // Background Color Index
+    int colIndex = ef.ReadBinaryInt(1, false);
+    _observer.WriteDebug("GifClass", "Background Color Index: " + colIndex, true);
+
+    // Aspect Ratio
+    int aspRatio = ef.ReadBinaryInt(1, false);
+
+    if(aspRatio == 0){
+      _observer.WriteDebug("GifClass", "Aspect Ratio: not specified", true);
+    } else {
+      _observer.WriteDebug("GifClass", "Aspect Ratio: " + aspRatio, true);
+      _observer.WriteDebug("GifClass", "PixelAspectRatio = " + ((aspRatio + 15)/64) , true);
+    }
+
+    // **************************************************************************************************************
+    //GLOBAL COLOR TABLE:
+    _observer.WriteDebug("GifClass", "Global Color Table:", true);
+    _observer.WriteDebug("GifClass", "=====================", true);
+
+    // the global color table flag would be 1 if this were present
+    if(gctFlag == 1){
+
+      // there are 3 x (2 to the power of bitDepth)
+      long gctSize = 2;
+      for(double i = 1; i< _bitDepth; i++)
+        gctSize = gctSize * 2;
+      _observer.WriteDebug("GifClass", "Global Color Table: " + gctSize + " elements (RGB)", true);
+      colorTableCount = gctSize;    // this is used to evaluate the LZW Minimum Code Size value later on
+
+      ef.Skip(gctSize*3);
+    }
+
+
+    // **************************************************************************************************************
+    //A GIF File may contain multiple Images - from here down can be repeated up to 256 times
+    // **************************************************************************************************************
+    while(_keepLooking && !gifPageFailed){
+      int lctFlag, lctSize;
+
+      _observer.WriteDebug("GifClass", "", true);
+      _observer.WriteDebug("GifClass", "===============================================", true);
+      _observer.WriteDebug("GifClass", "             ===== GIF Image =====             ", true);
+      _observer.WriteDebug("GifClass", "===============================================", true);
+      _observer.WriteDebug("GifClass", "GIF image loop at " + ef.GetPos() , true);
+
+
+      // ************************************************************************************************************
+      // EXTENSION INFORMATION
+      bool usedBlock;
+      int nextByte = ef.Peek();
+      long filePos;
+
+      while(nextByte != 0x2C && _keepLooking && gifPageFailed == false){
+        // if the byte of the next gif element isn't the image descriptor, then it
+        // is either a special element part of the 89a file spec,
+        // or it is an invalid file
+        filePos = ef.GetPos();
+        long nextBytes = ef.ReadBinaryInt(2, false);
+
+
+        if(nextBytes == 0xF921){
+
+          // ******************************************************************************************************
+          // Graphics Control Extension.  Has a header: 0x21 F9
+          int length;
+          length = ef.ReadBinaryInt(1, false);
+          int packedByte = ef.ReadBinaryInt(1, false);
+          int delayTime = ef.ReadBinaryInt(2, false);
+          int colorIndex = ef.ReadBinaryInt(1, false);
+          int temp = ef.ReadBinaryInt(1, false);
+          if(temp != 0x00){
+            _observer.WriteDebug("GifClass", "Graphics Control Extension corrupt.", true);
+            gifPageFailed = true;
+          } else {
+            _observer.WriteDebug("GifClass", "", true);
+            _observer.WriteDebug("GifClass", "Graphics Control Extension:", true);
+            _observer.WriteDebug("GifClass", "=====================", true);
+            _observer.WriteDebug("GifClass", "Offset: " + filePos, true);
+            _observer.WriteDebug("GifClass", "Extension Introducer: 0x21", true);
+            _observer.WriteDebug("GifClass", "Graphic Control Label: 0xF9", true);
+            _observer.WriteDebug("GifClass", "Size of remaining fields: 4 bytes (plus terminator)", true);
+            _observer.WriteDebug("GifClass", "Packed Byte: " + packedByte, true);
+            _observer.WriteDebug("GifClass", "Delay Time: " + delayTime, true);
+            _observer.WriteDebug("GifClass", "Color Index: " + colorIndex, true);
+            _observer.WriteDebug("GifClass", "Terminator at " + ef.GetPos(), true);
+          } // if(temp != 0x00
+
+          usedBlock = true;
+
+
+        } else if(nextBytes == 0x0121){
+          // ******************************************************************************************************
+          // Plain Text Extension.  Has a header: 0x21 01
+          //int blockSize =
+          ef.ReadBinaryInt(1, false);
+          int textGridLeft = ef.ReadBinaryInt(2, false);
+          int textGridTop = ef.ReadBinaryInt(2, false);
+          int textGridWidth = ef.ReadBinaryInt(2, false);
+          int textGridHeight = ef.ReadBinaryInt(2, false);
+          int cellWidth = ef.ReadBinaryInt(1, false);
+          int cellHeight = ef.ReadBinaryInt(1, false);
+          int textFgColorIndex = ef.ReadBinaryInt(1, false);
+          int textBgColorIndex = ef.ReadBinaryInt(1, false);
+
+          // the next part is the PlainTextData, which is divided into sub-groups
+          int dataLength;
+          String plainTextData;
+          do{
+            dataLength = ef.ReadBinaryInt(1, false);
+            String dataVal;
+            ef.ReadString(dataVal, dataLength);
+            plainTextData = plainTextData + dataVal;
+            }while(dataLength != 0x00);
+
+          _observer.WriteDebug("GifClass", "", true);
+          _observer.WriteDebug("GifClass", "Plain Text Extension:", true);
+          _observer.WriteDebug("GifClass", "=====================", true);
+          _observer.WriteDebug("GifClass", "Offset: " + filePos, true);
+          _observer.WriteDebug("GifClass", "Extension Introducer: 0x21", true);
+          _observer.WriteDebug("GifClass", "Label: 0x01", true);
+          _observer.WriteDebug("GifClass", "Block Size: 13, excluding PlainTextData", true);
+          _observer.WriteDebug("GifClass", "TextGridLeft: " + textGridLeft, true);
+          _observer.WriteDebug("GifClass", "TextGridTop: " + textGridTop, true);
+          _observer.WriteDebug("GifClass", "TextGridWidth: " + textGridWidth, true);
+          _observer.WriteDebug("GifClass", "TextGridHeight: " + textGridHeight, true);
+          _observer.WriteDebug("GifClass", "Cell Width: " + cellWidth, true);
+          _observer.WriteDebug("GifClass", "Cell Height: " + cellHeight, true);
+          _observer.WriteDebug("GifClass", "TextFgColorIndex: " + textFgColorIndex, true);
+          _observer.WriteDebug("GifClass", "TextBgColorIndex: " + textBgColorIndex, true);
+          _observer.WriteDebug("GifClass", "Plain Text Data: " + plainTextData, true);
+
+          usedBlock = true;
+
+
+        } else if(nextBytes == 0xFF21){
+          // ******************************************************************************************************
+          // Application Extension.  Has a header: 0x21 FF
+          ef.Skip(12);
+
+          // the next part is the Application, which is divided into sub-groups
+          int temp = ef.ReadBinaryInt(1, false);
+          while(temp != 0x00){
+            ef.Skip(temp);
+            temp = ef.ReadBinaryInt(1, false);
+          }
+
+          // the next byte should be a terminator
+          if(temp == 0x00){
+            _observer.WriteDebug("GifClass", "", true);
+            _observer.WriteDebug("GifClass", "Application Extension:", true);
+            _observer.WriteDebug("GifClass", "=====================", true);
+            _observer.WriteDebug("GifClass", "Offset: " + filePos, true);
+            _observer.WriteDebug("GifClass", "Extension Introducer: 0x21", true);
+            _observer.WriteDebug("GifClass", "Label: 0xFF", true);
+            _observer.WriteDebug("GifClass", "Block Size: 14", true);
+
+            usedBlock = true;
+
+          } else {
+            _observer.WriteDebug("GifClass", "Application Extension block invalid - gifPageFailed validation", true);
+            gifPageFailed = true;
+          }
+
+        } else if(nextBytes == 0xFE21){
+          // ******************************************************************************************************
+          // Comment Extension.  Has a header: 0x21 FE
+          // the next part is the Application, which is divided into sub-groups
+          int temp = ef.ReadBinaryInt(1, false);
+          String s;
+          String comment;
+          while(temp != 0x00){
+            ef.ReadString(s, temp);
+            comment = comment + s;
+            temp = ef.ReadBinaryInt(1, false);
+          }
+
+
+          // the next byte should be a terminator
+          if(temp == 0x00){
+            _observer.WriteDebug("GifClass", "", true);
+            _observer.WriteDebug("GifClass", "Comment Extension:", true);
+            _observer.WriteDebug("GifClass", "=====================", true);
+            _observer.WriteDebug("GifClass", "Offset: " + filePos, true);
+            _observer.WriteDebug("GifClass", "Extension Introducer: 0x21", true);
+            _observer.WriteDebug("GifClass", "Label: 0xFE", true);
+            _observer.WriteDebug("GifClass", "Comment Data: " + comment, true);
+
+            usedBlock = true;
+
+          } else {
+            _observer.WriteDebug("GifClass", "Comment Extension block invalid - gifPageFailed validation", true);
+            gifPageFailed = true;
+          }
+
+        } else {
+          // if we don't have a 89a version element, or an image descripter, then invalidate this hit
+          _observer.WriteDebug("GifClass", "GIF missing key elements - gifPageFailed verification", true);
+          gifPageFailed = true;
+        }
+
+        nextByte = ef.Peek();
+
+
+      } // while(nextByte ...
+
+
+
+      // ************************************************************************************************************
+      // LOCAL IMAGE DESCRIPTOR. Will precede each image in the file - begins //x2C (44 in decimal)
+      if(_keepLooking && !gifPageFailed ){
+
+        filePos = ef.GetPos();
+        int nextByte = ef.ReadBinaryInt(1, false);
+
+        if(nextByte != 0x2C){
+          _observer.WriteDebug("GifClass", "Image Descriptor not present - file gifPageFailed verification", true);
+          gifPageFailed = true;
+
+        } else {
+          int myLeft = ef.ReadBinaryInt(2, false);
+          int myTop = ef.ReadBinaryInt(2, false);
+          int myWidth = ef.ReadBinaryInt(2, false);
+          int myHeight = ef.ReadBinaryInt(2, false);
+          int myPacked = ef.ReadBinaryInt(1, false);
+
+          // evaluate the packed byte
+
+          // bit 0-2
+          lctSize = 1;
+          if(myPacked & 0x01)
+            lctSize = lctSize + 1;
+          if(myPacked & 0x02)
+            lctSize = lctSize + 2;
+          if(myPacked & 0x04)
+            lctSize = lctSize + 4;
+
+          // bit 3 - 4
+          // reserved 0x08, 0x10
+
+          // bit 5
+          int sortFlag;
+          if(myPacked & 0x20)
+            sortFlag = 1;
+
+          // bit 6
+          int interlaceFlag;
+          if(myPacked & 0x40)
+            interlaceFlag = 1;
+
+          // bit 7
+          if(myPacked & 0x80)
+            lctFlag = 1;
+
+          _observer.WriteDebug("GifClass", "", true);
+          _observer.WriteDebug("GifClass", "Local Image Descriptor:", true);
+          _observer.WriteDebug("GifClass", "=====================", true);
+          _observer.WriteDebug("GifClass", "Offset: " + filePos, true);
+          _observer.WriteDebug("GifClass", "Separator: 0x2C", true);
+          _observer.WriteDebug("GifClass", "Left: " + myLeft, true);
+          _observer.WriteDebug("GifClass", "Top: " + myTop, true);
+          _observer.WriteDebug("GifClass", "Width: " + myWidth, true);
+          _observer.WriteDebug("GifClass", "Height: " + myHeight, true);
+          _observer.WriteDebug("GifClass", "Packed Byte: " + myPacked, true);
+          _observer.WriteDebug("GifClass", "  > Local Color Table Flag: " + lctFlag, true);
+          _observer.WriteDebug("GifClass", "  > Interlace Flag: " + interlaceFlag, true);
+          _observer.WriteDebug("GifClass", "  > Sort Flag: " + sortFlag, true);
+          _observer.WriteDebug("GifClass", "  > Local Color Table Size: " + lctSize, true);
+        }
+      }
+
+
+      // ************************************************************************************************************
+      //LOCAL COLOR TABLE - optional; its presence will be outlined in the last byte of the Image Descriptor
+      if(_keepLooking && !gifPageFailed ){
+        if(lctFlag == 1){
+
+          // there are 3 x (2 to the power of bitDepth)
+          long mySize = 2;
+          for(int i = 1; i<lctSize;i++)
+            mySize = mySize * 2;
+          colorTableCount = mySize;    // this is used to evaluate the LZW Minimum Code Size value later on
+
+          _observer.WriteDebug("GifClass", "", true);
+          _observer.WriteDebug("GifClass", "Color Table:", true);
+          _observer.WriteDebug("GifClass", "=====================", true);
+          _observer.WriteDebug("GifClass", "Local Color Table: " + mySize + " elements (RGB)", true);
+
+          ef.Skip(mySize*3);
+        }
+      }
+
+      // ************************************************************************************************************
+      //IMAGE DATA: mandatory - a continuous group of sub-blocks
+      if(_keepLooking && !gifPageFailed){
+
+        _observer.WriteDebug("GifClass", "", true);
+        _observer.WriteDebug("GifClass", "Image Data:", true);
+        _observer.WriteDebug("GifClass", ":=====================", true);
+        _observer.WriteDebug("GifClass", "Image Data starts at: " + ef.GetPos(), true);
+
+        // read the first byte, as this is the LZW Minimum Code Size
+        int lzwMinimumCodeSize = ef.ReadBinaryInt(1, true);
+        // in either the Global Color Table or the Local Color Table, the number of colors in the table will determin
+        // the number of bits required to reference any color in the table.
+        // So a gif with 128 colors will need 7 bits (0 - 127) to find any color.
+        // ..in that case, the LZW Minimum Code Size should be 0x07...
+        //  ALSO, the minimum code size must be AT LEAST 0x01
+        if(lzwMinimumCodeSize >= 1){
+          int bitsNeeded;
+
+          if(colorTableCount < 4)
+            bitsNeeded = 2;
+          else if(colorTableCount <= 8)
+            bitsNeeded = 3;
+          else if(colorTableCount <= 16)
+            bitsNeeded = 4;
+          else if(colorTableCount <= 32)
+            bitsNeeded = 5;
+          else if(colorTableCount <= 64)
+            bitsNeeded = 6;
+          else if(colorTableCount <= 128)
+            bitsNeeded = 7;
+          else if(colorTableCount <= 256)
+            bitsNeeded = 8;
+          else if(colorTableCount <= 512)
+            bitsNeeded = 9;
+          else if(colorTableCount <= 1024)
+            bitsNeeded = 10;
+          else if(colorTableCount <= 2048)
+            bitsNeeded = 11;
+          else if(colorTableCount <= 4096)
+            bitsNeeded = 12;
+
+          if(lzwMinimumCodeSize != bitsNeeded){
+            // give a bit of leeway - it should always be a match, but just in case...for now
+            if(lzwMinimumCodeSize > 12){
+              _observer.WriteDebug("GifClass", "LWZ Minimum Code Size was an invalid number (" + lzwMinimumCodeSize + ").", true);
+              _keepLooking = false;
+            }
+          }
+        }
+        else
+          _keepLooking = false;
+
+        if(_keepLooking){
+          // Initialize variables for evaluating the image data
+          _keepLooking = false;
+          int count;
+
+          bool ImageData = true;
+
+          while(ImageData){
+
+            //this byte will describe the size of each sub-block of the IMAGE DATA element
+            filePos = ef.GetPos();
+            int i = ef.ReadBinaryInt(1, true);
+
+            _observer.WriteDebug("GifClass", "", true);
+            _observer.WriteDebug("GifClass", "============", true);
+            _observer.WriteDebug("GifClass", "Offset: " + filePos, true);
+            _observer.WriteDebug("GifClass", "> Image Data: Sub-Block at Offset " + ef.GetPos(), true);
+            _observer.WriteDebug("GifClass", "> Image Data: Sub-Block Size = " + i, true);
+
+            // If the Sub-Block size is zero, then it is a terminator for this Image
+            if(i == 0){
+
+              firstPictureValid = true;  // Indicate this file's first image if valid
+              _keepLooking = true;
+              ImageData = false;    // Set switch to exit the loop
+
+              _observer.WriteDebug("GifClass", "> Image Data: Sub-Block Terminated at " + ef.GetPos(), true );
+
+            } else if(ef.GetPos() + i > searchSize){
+
+              firstPictureValid = true;   //to indicate that this file is valid
+              ImageData = false;     //to exit this loop
+              _keepLooking = false;      //to Stop searching for images
+
+              _observer.WriteDebug("GifClass", "> Image Data: Sub-Block Truncated at " + searchSize, true);
+              ef.Seek(searchSize);
+
+            } else{
+              //if this is the end of a sub-block with another sub-block beginning, then continue with this loop
+              ef.Skip(i);
+              _observer.WriteDebug("GifClass", "> Image Data: Sub-Block End at " + ef.GetPos() , true);
+            }
+          } // while(ImageData...
+        }
+      } // if(myReturn.. (for image data)
+
+      // Check to see if this is the Trailer - if not, then loop back
+      if(!gifPageFailed )
+        if(ef.Peek() == 0x3B)
+          _keepLooking = false;
+    }  //Loop back to begining in case there is another image in the file
+
+
+
+    if(firstPictureValid || gifPageFailed == false){
+      // **************************************************************************************************************
+      //TRAILER                       --MANDATORY - 1 byte in length, = //x3B (59 in decimal)
+      _observer.WriteDebug("GifClass", "GIF Trailer:", true);
+       _observer.WriteDebug("GifClass", "=====================", true);
+       _observer.WriteDebug("GifClass", "trailer position extrapolated: " + ef.GetPos(), true);
+
+      int i = ef.ReadBinaryInt(1, true);
+
+      // do we have a real trailer or, failing that, a valid picture to work with
+      if(i == 0x3B || firstPictureValid){
+        carveSize = ef.GetPos() - offset;
+
+      // or do we have a null byte - some times this is a spare byte, so check the next one just in case
+      } else if(i==0){
+        if(ef.ReadBinaryInt(1, true) == 59)
+          carveSize = ef.GetPos() - offset;
+
+      // otherwise, we've got an invalid file
+      } else
+        carveSize = 0;
+
+      // Evaluate the image based on mins and maxes
+      if(carveSize > _gifMax){
+        _observer.WriteDebug("GifClass", "File Length (" + carveSize + ") exceeds the user-specified GIF size (" + _gifMax + ")", true);
+        carveSize = 0;
+      }
+      if(carveSize < _gifMin){
+        _observer.WriteDebug("GifClass", "File Length (" + carveSize + ") is less than the user-specified GIF minimum size (" + _gifMin + ")", true);
+        carveSize = 0;
+      }
+
+      // Evaluate the Image Dimensions
+      if(imgHeight == 0 || imgWidth == 0){
+        carveSize = 0;
+        _observer.WriteDebug("GifClass", "Invalid File Dimensions: " + imgWidth + " x " + imgHeight, true);
+      } else {
+        // ascertain the image aspect ratio
+        double tempH = imgHeight;
+        double tempW = imgWidth;
+        if(tempW > tempH)
+          _aspectRatio = tempW / tempH;
+        else
+          _aspectRatio = tempH / tempW;
+
+         _observer.WriteDebug("GifClass", "== GIF ANALYSIS COMPLETE ====", true);
+         _observer.WriteDebug("GifClass", "Bit Depth  = " + _bitDepth, true);
+         _observer.WriteDebug("GifClass", "Img Width  = " + imgWidth, true);
+         _observer.WriteDebug("GifClass", "Img Height = " + imgHeight, true);
+         _observer.WriteDebug("GifClass", "Aspect Rat = " + _aspectRatio, true);
+         _observer.WriteDebug("GifClass", "Carve Size = " + carveSize, true);
+      }
+    }
+
+    return carveSize;
+  }
+
+}

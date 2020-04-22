@@ -1,0 +1,850 @@
+/*
+version 1.0.5:
+ - updated to allow for APP1 markers without the standard 'Exif  ' text inside it.
+
+version 1.0.4:
+ - updated to allow any segment to be off by 2-bytes at the end
+
+version 1.0.3:
+ - updated CheckImageData to allow 0xC4 in the Image Data stream
+
+version 1.0.2:
+ - fixed problem with _rangeToIgnoreSearchHits.  It was giving an offset back, but it needs to give back the number of bytes to skip.  Fixed in JpgBase
+
+version 1.0.1:
+ - added validation code to the DHT segment - to address JPG data which seems to fully comply with the structure, even beyond the DHT, and yet are not true
+   pictures.  The number of 'symbols' in the DHT is compared to the reported size of the segment to identify invalid data.
+
+*/
+
+include "..\\Core Files\\Interfaces\\ObserverInterface"
+include "ExifClass"
+
+class JpgBase{
+
+  bool              hasAPP0;
+  bool              hasDQT;
+  bool              hasSOF;
+  bool              hasDHT;
+  bool              hasSOS;
+  bool              isHomePic;
+  bool              myReturn;
+
+  double            _aspectRatio;
+  double            _bitDepth;
+
+  int               compressionRatio;
+
+  int               _dctType;
+
+  long              _jpgMax;
+  long              _jpgMin;
+  long              EndPos;
+  long              ImageDataSize;
+  long              imgHeight;
+  long              imgWidth;
+  long              NewLength;
+  long              SegmentSize;
+  long              OffsetToStartOfScan;
+
+  ObserverInterface _observer;
+
+  String            _metaData;
+
+  JpgBase(ObserverInterface theObserver)
+  {
+    _observer = theObserver;
+  }
+
+
+
+
+  // NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW
+  // NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW
+  // NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW
+
+
+  //***********************************************************************************************************************/
+  //  SosIsGood - this function will read through a Start of Scan marker and ensure that it's parameters are valid
+  //            - valid values are contingent upon the type of file the image is, which is defined by which
+  //              Start of Frame marker is used (stored in variable _dctType)nt type.
+  bool SosIsGood(FileClass File){
+    bool isGood = true;
+    long pos = File.GetPos();
+
+    // read in the two byte length marker
+    int Ls = File.ReadBinaryInt(2, true);
+
+    // read in the number of components
+    int Ns = File.ReadBinaryInt(1, true);
+
+    // skip over 2-bytes per component
+    File.Skip(Ns *2);
+
+    // Read in the Start of Spectral Selection (Ss)
+    int Ss = File.ReadBinaryInt(1, true);
+
+    // Read in the End of Spectral Selection (Se)
+    int Se = File.ReadBinaryInt(1, true);
+
+    // Read in the third byte, which is a packed one:  Successive approximation bit position high (Ah), and Succesive approximation bit position low (Al)
+    int val = File.ReadBinaryInt(1, true);
+    int Ah;
+    int Al;
+
+    if(val & 0x1)
+      Al += 1;
+    if(val & 0x2)
+      Al += 2;
+    if(val & 0x4)
+      Al += 4;
+    if(val & 0x8)
+      Al += 8;
+    if(val & 0x10)
+      Ah += 1;
+    if(val & 0x20)
+      Ah += 2;
+    if(val & 0x40)
+      Ah += 4;
+    if(val & 0x80)
+      Ah += 8;
+
+    // Now evaluate these markers  - these values are taken from ISO 10918-1, JPEG Standard Part 1, Table B.3 (pg38)
+    if(_dctType == 0){
+      // Baseline Sequential DCT
+      if(!Ss == 0)
+        isGood = false;
+      if(!Se == 63)
+        isGood = false;
+      if(!Ah == 0)
+        isGood = false;
+      if(!Al == 0)
+        isGood = false;
+    }
+    else if(_dctType == 1){
+      // Extended Sequential DCT
+      if(!Ss == 0)
+        isGood = false;
+      if(!Se == 63)
+        isGood = false;
+      if(!Ah == 0)
+        isGood = false;
+      if(!Al == 0)
+        isGood = false;
+    }
+    else if(_dctType == 2){
+      // Progressive DCT
+      if( !(Ss >= 0 && Ss <= 63) )
+        isGood = false;
+      if(Ss == 0 && Se != 0)
+        isGood = false;
+      else {
+        if( !(Se >= Ss && Se <= 63) )
+          isGood = false;
+      }
+      if( !(Ah >= 0 && Ah <= 13) )
+        isGood = false;
+      if( !(Al >= 0 && Al <= 13) )
+        isGood = false;
+    }
+    else if(_dctType == 3){
+      // Lossless
+      if(! (Ss >= 1 && Ss <= 7) )
+        isGood = false;
+      if(!Se == 0)
+        isGood = false;
+      if(!Ah == 0)
+        isGood = false;
+      if( !(Al >= 0 && Al <= 15) )
+        isGood = false;
+    }
+    else{
+      _observer.WriteDebug("JpgClass", "Start of Scan Marker found, but DCT Type not yet set!!", true);
+    }
+
+    if(!isGood){
+      _observer.WriteDebug("JpgClass", "", true);
+      _observer.WriteDebug("JpgClass", "Offset: " + (pos - 2) + ".  Invalid Progressive Parameters: Ss:" + Ss + "  Se: " + Se + "  Ah:" + Ah + "  Al:" + Al + ".  Data will be truncated at this point.", true);
+    }
+    else {
+      // Also, we should now be at the end of the SoS marker
+      if(!(File.GetPos() == (pos + Ls))){
+         _observer.WriteDebug("JpgClass", "Invalid Start of Scan Marker - length did not match actual data contained within", true);
+      }
+    }
+
+    // put things back the way we found them
+    File.Seek(pos);
+    return isGood;
+  }
+
+  //***********************************************************************************************************************/
+  //  CheckImageData - this will scan through the JPG Image Data and watch for any incidence of HEX 0xFF.  0xFF can't be used
+  //  without being followed by 0x00.  Otherwise it must be a valid JPG segment type.
+  //  Acceptable Values following 0xFF:
+  //    0x00 (indicates FF is part of the encoded image data)
+  //    0xD0 - 0xD7 Restart Markers: RST0-7
+  //    0xDA (Start of Scan) - multiple SoS markers are part of a progressive interlace jpg
+  //    0xF9 (EOF)
+  //
+  //  Anything else is treated as bad data and the image data size variable is truncated accordingly
+  //************************************************************************************************************************/
+
+  void CheckImageData(FileClass File, long startAt, long length){
+    _observer.WriteDebug("JpgClass", "", true);
+    _observer.WriteDebug("JpgClass", "Scanning Image Data for invalid markers (start: " + startAt + ", length: " + length + ")", true);
+
+    // Initialize the Search Engine
+    SearchClass search();
+    search.AddKeyword("\\xFF", KeywordClass::ANSI | KeywordClass::GREP);
+    search.Create();
+
+    // Initialize Settings
+    File.Seek(startAt);
+
+    long result;
+    result = search.Find(File, length, -1, SearchClass::STATUSUPDATE);
+    SearchClass::HitArrayClass hits = search.GetHits();
+
+    // If there are hits, validate them
+    _observer.WriteDebug("JpgClass", result + " 0xFF markers found in Image Data.", true);
+
+    forall(SearchClass::HitClass h in hits){
+      // jump to byte after the 0xFF tag and evaluate
+      File.Seek(h.Offset() + 1);
+
+      int i = File.ReadBinaryInt(1, true);
+
+      // evaluate the byte following 0xFF
+      if(i == 0){
+        // 0x00 - acceptable
+      }
+      else if(i == 196){
+        // 0xC4 - acceptable
+      }
+      else if(i >= 208 && i <= 215){
+        // 0xD0 - 0xD7 - Restart Markers RST0-7
+      }
+      else if(i == 217){
+        // 0xD9 - EOF
+        ImageDataSize = File.GetPos() - startAt;
+        _observer.WriteDebug("JpgClass", "Image Data Size set to: " + ImageDataSize + " - footer detected.", true);
+        break;
+      }
+      else if(i == 218){
+        // 0xDA - acceptable
+        // Scan the DA marker for invalid progressive parameters
+        if(!SosIsGood(File)){
+          ImageDataSize = File.GetPos() - startAt - 3;
+          _observer.WriteDebug("JpgClass", "Invalid Progressive Parameters. Image Data Size set to: " + ImageDataSize, true);
+          break;
+        }
+      }
+      else{
+        // everything else is invalid within the image data, and the file needs to be truncated to this point
+        ImageDataSize = File.GetPos() - startAt - 3;
+        _observer.WriteDebug("JpgClass", "Image Data Size set to: " + ImageDataSize + " - footer detected.", true);
+        break;
+      }
+
+    }
+
+  }
+  // NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW
+  // NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW
+  // NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW NEW
+
+
+
+
+  //***********************************************************************************************************************/
+  //ValidateExif will parse through the Exif data of a digital camera picture,
+  //and compile a string of useful data.
+  //If the information doesn't add up, the file will be pushed to the end of it's Physical Size so the entry
+  //will be skipped
+  //************************************************************************************************************************/
+
+  void ValidateExif(FileClass File,long StartAt, long MaxSize){
+    bool      anotherIFD = true,
+              EndianType = false;
+
+    long      TiffHeader = 0,
+              SoiOffset = 0;
+
+    String    COPYRIGHT,
+              DATETIME,
+              ExifType,
+              MAKE,
+              MODEL,
+              SOFTWARE;
+
+
+    //ignore the Segment Length Marker & Exif Header
+    _observer.WriteDebug("JpgClass", "", true);
+    _observer.WriteDebug("JpgClass", "== Evaluating JPEG EXIF data (offset " + (File.GetPos()-2) + ")", true);
+    SoiOffset = File.GetPos() + File.ReadBinaryInt(2, true);
+    
+    // Normally, the next 6 bytes would be "Exif" followed by two null bytes.  But not always
+    String exifText;
+    File.ReadString(exifText, 4);
+    if(exifText == "Exif")
+      File.Skip(2);
+    else {
+      File.Skip(-4);
+      _observer.WriteDebug("JpgClass", "  APP1 marker but missing the 6-byte 'Exif  ' text...", true);
+    }
+    //File.Skip(6); //"Exif  "
+
+    //The next byte position is the reference point for all offests listed in the Exif Data
+    TiffHeader = File.GetPos();
+    File.ReadString(ExifType, 2);
+
+
+    // Then determine if all values are stored as little or big Endian
+    if(ExifType == "II")
+      EndianType = false;
+    else
+      EndianType = true;
+    _observer.WriteDebug("JpgClass", "   EndianType = " + ExifType, true);
+
+
+    //skip over the TIFF Byte type
+    File.Skip(2);
+
+
+    //NOW:  cycle through until you run out of IFDs
+    bool isGood = true;
+    long lastAt;
+    int ifdCount;
+
+    while(anotherIFD){
+      long SkipTo;
+
+      SkipTo = File.ReadBinaryInt(4, EndianType);
+
+      //Ensure that this offset would not surpass the JPG SOI
+      if(TiffHeader + SoiOffset < TiffHeader + SkipTo){
+        isGood = false;
+        _observer.WriteDebug("JpgClass", "   Tiff Header + SoiOffset < TiffHeader + SkipTo", true);
+      }
+
+
+      //if the Offset to the next Directory is ZERO, then there are no more Directories
+      if(SkipTo == 0){
+        isGood = false;
+        _observer.WriteDebug("JpgClass", "   SkipTo == false", true);
+
+      //if the Offset points to a location that exists BEFORE the JPG header, it is invalid
+      } else if(SkipTo + TiffHeader < StartAt){
+        isGood = false;
+        _observer.WriteDebug("JpgClass", "   SkipTo + TiffHeader < StartAt", true);
+      }
+
+      //if everything is good then search the Diectories in this IFD
+      if(anotherIFD && isGood) {
+        File.Seek(TiffHeader + SkipTo);
+        _observer.WriteDebug("JpgClass", "   Seeking to: " + File.GetPos(), true);
+
+        //Process Each Directory and record any valuable information
+        long Directories = File.ReadBinaryInt(2, EndianType);
+
+        // Impose a Directory cut off of 200
+        if(Directories > 100){
+          Directories = 100;
+          _observer.WriteDebug("JpgClass", "", true);
+          _observer.WriteDebug("JpgClass", "   == Evaluating " + Directories + "(cut to 100) in this IFD (offset " + File.GetPos() + ")", true);
+
+        } else {
+          _observer.WriteDebug("JpgClass", "", true);
+          _observer.WriteDebug("JpgClass", "   == Evaluating " + Directories + " in this IFD (offset " + File.GetPos() + ")", true);
+        }
+
+        if(File.GetPos() != lastAt){
+          lastAt = File.GetPos();
+
+          long tempCount = Directories+1;
+
+          for(Directories; Directories > 0; Directories = Directories - 1){
+            if(isGood){
+
+              _observer.WriteDebug("JpgClass", "      Directory " + (tempCount - Directories) + " / " + (tempCount-1) + ":", true);
+
+              ExifClass myExif(_observer);
+              myExif.EndianType = EndianType;
+              myExif.TiffHeader = TiffHeader;
+              _metaData = _metaData + myExif.CheckTag(File);
+              lastAt = myExif.LastAt;
+            }
+
+            // kill the process if we're before the starting point
+            if(File.GetPos() > lastAt){
+              _observer.WriteDebug("JpgClass", "Moving backwards in the data.  Invalid.", true);
+              isGood = false;
+            }
+
+            // kill the process if we're exceeding the JPG maximum size
+            if(File.GetPos() - StartAt > MaxSize){
+              _observer.WriteDebug("JpgClass", "Analysis exceeds file size maximum.", true);
+              isGood = false;
+            }
+
+          }
+
+        } else
+          anotherIFD = false;
+
+      } else
+        anotherIFD = false;
+
+      if(isGood){
+        // track the number of IFDs we've checked.  Kill the process at 100
+        ifdCount++;
+        if(ifdCount > 100){
+          anotherIFD = false;
+          _observer.WriteDebug("JpgClass", "Too many IFDs examined.  EXIF analysis terminated.", true);
+        }
+      } else
+        anotherIFD = false;
+
+    }  //end of the WHILE loop
+
+    // Remove trailing 4 spaces
+    if(_metaData.GetLength() > 4)
+      _metaData = _metaData.SubString(0, _metaData.GetLength()-4);
+
+    if(SoiOffset == 0) {
+      File.Seek(EndPos);
+      isHomePic = false;
+    } else {
+      _observer.WriteDebug("JpgClass", "JPG SOI = " + SoiOffset, true);
+      File.Seek(SoiOffset);
+
+      _observer.WriteDebug("JpgClass", "...after EXIF, starting at: " + File.GetPos(), true);
+    }
+  }
+
+
+  //************************************************************************************************************************/
+  //SearchFile will begin after the Image Segments of the JPG and try to
+  //find a footer for this file - where it failed, it will make a best guess based on
+  //the identified file compression ratio
+  //************************************************************************************************************************/
+
+  void SearchFile(FileClass File, long StartAt){
+
+    // Initialize the Search Engine
+    SearchClass    Search();
+    Search.AddKeyword("\\xFF\\xD9", KeywordClass::ANSI | KeywordClass::GREP);
+    Search.Create();
+
+    // Open the Entry and move cursor after Image Data Begins
+    long           result = 1;
+
+    // Initialize Settings
+    _observer.WriteDebug("JpgClass", "file.Seek(" + StartAt + ")", true);
+    File.Seek(StartAt);
+    ImageDataSize = 0;
+
+    // Search the entry for a JPG footer
+    result = Search.Find(File, _jpgMax, 1, SearchClass::STATUSUPDATE);
+    SearchClass::HitArrayClass hits = Search.GetHits();
+
+
+    // If there was a hit, then process it
+    _observer.WriteDebug("JpgClass", result + " hits found.", true);
+
+    if(result > 0){
+
+      forall(SearchClass::HitClass h in hits){
+
+        File.Seek(h.Offset());
+        _observer.WriteDebug("JpgClass", "hit at offset " + h.Offset(), true);
+
+        long checkVal = File.ReadBinaryInt(2, true);
+        _observer.WriteDebug("JpgClass", "checkVal = " + checkVal, true);
+        File.Seek(h.Offset());
+        _observer.WriteDebug("JpgClass", "Jump to " + File.GetPos(), true);
+      }
+
+      ImageDataSize = File.GetPos() - StartAt + 2;
+
+    } else {
+
+      _observer.WriteDebug("JpgClass", "No JPG Footer found.  Estimating image data size:", true);
+
+      // Calculate what the Decompressed value would likely be, based on Width, Height, CompressionRate
+      long Decompressed = imgHeight * imgWidth * 24 * (100 - compressionRatio) / 8 / 100;
+      _observer.WriteDebug("JpgClass", "Decompressed estimated as " + Decompressed + " (h=" + imgHeight + " w=" + imgWidth + ")", true);
+
+      // Enforce a filesize limit if the decompressed value exceeds the jpg limit
+      if(Decompressed > _jpgMax){
+        Decompressed = _jpgMax;
+        _observer.WriteDebug("JpgClass", "Decompressed adjusted to " + Decompressed, true);
+      }
+
+      if(Decompressed > (File.GetSize() - SegmentSize) ){
+        Decompressed = File.GetSize() - SegmentSize;
+        _observer.WriteDebug("JpgClass", "Decompressed reduced to Logical Size", true);
+      }
+
+      ImageDataSize = Decompressed;  // Use the Decompressed Value
+
+    }
+
+    _observer.WriteDebug("JpgClass", "Working with an ImageDataSize of = " + ImageDataSize, true);
+
+  }
+
+  //*************************************************************************************************************/
+  //Note that even though the Start of Scan is listed, it appears as though JPGs can load valid images without one
+  //...as such it is not currently used to validate a JPG
+  //*************************************************************************************************************/
+  long _validate(EntryClass e, long offset){
+    EntryFileClass ef();
+
+    #ifdef VERSION_6
+      ef.Open(e, FileClass::SLACK);
+    #else
+      ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
+    #endif
+
+    ef.SetCodePage(CodePageClass::ANSI);
+
+    return _validate(ef, offset);
+  }
+
+  long _validate(FileClass File, long StartAt){
+    long  UseThisLength;
+
+    // Reset the classwide variables
+    _aspectRatio = 0;
+    _bitDepth = 0;
+    compressionRatio = 0;
+    ImageDataSize = 0;
+    EndPos = 0;
+    NewLength = 0;
+    SegmentSize = 0;
+    imgWidth = 0;
+    imgHeight = 0;
+    myReturn = true;
+    hasAPP0 = false;
+    hasDQT = false;
+    hasSOF = false;
+    hasDHT = false;
+    hasSOS = false;
+    isHomePic = true;
+    _metaData = "";
+    _dctType = -1;
+
+    long mySize = _jpgMax;
+
+
+    _observer.WriteDebug("JpgClass", "", true);
+    _observer.WriteDebug("JpgClass", "== JPG ====================", true);
+    _observer.WriteDebug("JpgClass", "Expected Size: " + mySize, true);
+
+    mySize = StartAt + mySize;
+
+
+    // Set the file CodePage to ANSI for reading in strings
+    File.SetCodePage(CodePageClass::ANSI);
+
+    //****************************************************************************/
+    //Start of Image (SOI)                        -- MANDATORY - must be //xFF//xD8
+    File.Seek(StartAt);
+    _observer.WriteDebug("JpgClass", "SOI: " + File.GetPos(), true);
+    File.Skip(2);
+
+    //from this point until the actual image data, the file will be presented in segments
+    //while it is currently not possible to determine the size of the image data, there are 5 key
+    //segments that must appear in the file for it to be considered valud
+
+    hasAPP0 = false;
+    hasDQT = false;
+    hasSOF = false;
+    hasDHT = false;
+    hasSOS = false;
+    isHomePic = false;
+
+    //each segment follows the following format:
+    //2 Bytes = Segment Type
+    //2 Bytes = Segment Size
+    //unsigned = data length (= Segment Size - 2)
+    bool myContinue = true;
+
+    while((!hasAPP0 || !hasDQT  || !hasSOF  || !hasDHT || !hasSOS) &&
+                                                         ((File.GetPos() + 2) < mySize) && (myContinue)){
+      //read in the segment marker = must always be //xFF, or 255 in decimal
+
+      _observer.WriteDebug("JpgClass", "", true);
+      _observer.WriteDebug("JpgClass", "Next Segment at: " + File.GetPos(), true);
+
+      // This bit of code was added in to account for segments that are not standard size
+      // They are 2 bytes longer than they should be, according to the specification.
+      // So if the next byte isn't 0xFF, then jump ahead
+      // 2 Bytes and check again, just in case.
+      int tempValue = File.ReadBinaryInt(1, true);
+
+      if (tempValue != 255){
+        File.Skip(1);
+        _observer.WriteDebug("JpgClass", "Next Segment tested again (2bytes later) at: " + File.GetPos(), true);
+        tempValue = File.ReadBinaryInt(1, true);
+      }
+
+      if(tempValue != 255){
+        myContinue = false;
+        _observer.WriteDebug("JpgClass", "Exit Set for JPG loop - myContinue = " + myContinue, true);
+      }
+      else {
+        //read in the segment identifier
+        int i = File.ReadBinaryInt(1, true);
+
+        if(i == 225){
+          _observer.WriteDebug("JpgClass", "Segement Type = APP1 (xE1)", true);
+          isHomePic = true;
+          ValidateExif(File, StartAt, mySize);
+          if(File.GetPos() != EndPos)
+            NewLength = File.GetPos() - StartAt;
+          else
+            NewLength = 10;
+
+          hasAPP0 = true;
+
+        } else {
+          if(i == 0xE0) {                 // APP0
+            _observer.WriteDebug("JpgClass", "Segment Type = APP0", true);
+            hasAPP0 = true;
+
+          } else if (i == 0xDB ) {        // DQT
+            _observer.WriteDebug("JpgClass", "Segment Type = DQT", true);
+            hasDQT = true;
+          } else if (i == 0xC4) {          // DHT
+            _observer.WriteDebug("JpgClass", "Segment Type = DHT", true);
+            hasDHT = true;
+
+            // Parse the contents of the DHT - this is a new method to weed out bad data
+            long jumpBackto = File.GetPos();
+            long dhtLength = File.ReadBinaryInt(2, true);
+            long dhtEndsAt = File.GetPos() - 2 + dhtLength;
+
+            // DHT can contain multiple Huffman Tables, that should end gracefully at the end of the DHT as defined by the segment's Size value from above
+            while(File.GetPos() < dhtEndsAt && myContinue){
+              int tempVal = File.ReadBinaryInt(1, true);
+              int dhtIndex;
+              int dhtType;
+              bool dhtIsGood = true;
+
+              /*
+              // Turns out this is also not true...
+              if(tempVal & 0x01)
+                dhtIsGood = false;
+              if(tempVal & 0x02)
+                dhtIsGood = false;
+              if(tempVal & 0x04)
+                dhtIsGood = false;
+              */
+              if(tempVal & 0x08)
+                dhtType = 1;
+              if(tempVal & 0x10)
+                dhtIndex = dhtIndex + 1;
+              if(tempVal & 0x20)
+                dhtIndex = dhtIndex + 2;
+              if(tempVal & 0x40)
+                dhtIndex = dhtIndex + 4;
+              if(tempVal & 0x80)
+                dhtIndex = dhtIndex + 8;
+
+              if(dhtIsGood){
+                int dhtSymbolCount;
+                for(int i = 0; i < 16; i++){
+                  dhtSymbolCount = dhtSymbolCount + File.ReadBinaryInt(1, true);
+                }
+
+
+                if(dhtSymbolCount == 0){
+                  // can't have zero symbols.
+                  myContinue = false;
+                  hasDHT = false;
+                  break;
+                }
+                else if(dhtSymbolCount <= 256){
+                  // each symbol should be in ascending order.  if not, it's no good
+                  // This turns out not to be true...have pictures that violate this rule and still load
+                  /*
+                  int lastVal = -1;
+                  int tempVal;
+                  for(int i = 0; i < dhtSymbolCount; i++){
+                    tempVal = File.ReadBinaryInt(1, true);
+                    if(tempVal > lastVal)
+                      lastVal = tempVal;
+                    else {
+                      // Invalidate this data
+                      _observer.WriteDebug("JpgClass", "  !! DHT Symbols were not in ascending order.", true);
+                      myContinue = false;
+                      hasDHT = false;
+                      break;
+                    }
+                  }
+                  */
+                  File.Skip(dhtSymbolCount);
+                }
+                else {
+                  // Invalidate this data
+                  _observer.WriteDebug("JpgClass", "  !! DHT Symbol Count exceeded maximum count of 256 (" + dhtSymbolCount + ")", true);
+                  myContinue = false;
+                  hasDHT = false;
+                }
+              }
+              else {
+                // Invalidate this data
+                _observer.WriteDebug("JpgClass", "  !! DHT HT information packed byte contained illegal data.", true);
+                myContinue = false;
+                hasDHT = false;
+              }
+            }
+
+
+            // if everything seemed to pass, then see if the Symbols in the DHT gracefully ended where they were supposed to
+            if(myContinue && dhtEndsAt != File.GetPos()){
+              // Invalidate this data
+              _observer.WriteDebug("JpgClass", "  !! DHT Symbol data did not conform to the lenght specified in the DHT header..", true);
+              myContinue = false;
+              hasDHT = false;
+            }
+
+
+            // revert to the original code process
+            File.Seek(jumpBackto);
+
+          } else if (i >= 192 && i <= 207 ) {           //  Start of Frame 1 - 15:  xC0 - xCF, with the exctpion of xC4, which is above (DHT)
+            _observer.WriteDebug("JpgClass", "Segment Type = SOF", true);
+            hasSOF = true;
+            long lastPos = File.GetPos();
+            File.Skip(3);
+
+
+            // Determine what kind of DCT this image is.  This is defined by the value of the SOF marker
+            if(i == 0xC0)
+              _dctType = 0;
+            else if(i == 0xC1)
+              _dctType = 1;
+            else if(i == 0xC2)
+              _dctType = 2;
+            else if(i == 0xC3)
+              _dctType = 3;
+
+
+            // Read in the Image Dimensions
+            imgHeight = File.ReadBinaryInt(2,  true);
+            imgWidth = File.ReadBinaryInt(2, true);
+
+            // Then read in the Bit Depth
+            int tempI = File.ReadBinaryInt(1);
+            if(tempI == 1)
+              _bitDepth = 8;
+            else if (tempI == 2)
+              _bitDepth = 16;
+            else if (tempI == 3)
+              _bitDepth = 24;
+            else if (tempI == 4)
+              _bitDepth = 48;
+            else
+              _bitDepth = 0;
+
+            File.Seek(lastPos);
+          } else if (i == 218) {       //xDA
+            _observer.WriteDebug("JpgClass", "Segment Type = SOS", true);
+
+
+            // Check the Start of Scan data to ensure it's good
+            if(!SosIsGood(File)){
+              // means it's bad, and we're still in the header so it's crap
+              _observer.WriteDebug("JpgClass", "Invalid SOS - image invalid", true);
+              myContinue = false;
+              break;
+            }
+
+            hasSOS = true;
+            OffsetToStartOfScan = File.GetPos() - StartAt;
+          } else if (i == 254) {
+            _observer.WriteDebug("JpgClass", "Segment Type = COM", true);
+          } else {
+            _observer.WriteDebug("JpgClass", "Segment Type = other", true);
+          }
+
+         //now read in the next 2 bytes - this will be the length of the data to follow
+         i = File.ReadBinaryInt(2, true);
+         _observer.WriteDebug("JpgClass", "Segment Length = " + i, true);
+
+         i = i - 2;                    //subtract the length of the bytes just read in
+
+         if(i<=0)
+           myContinue = false;
+
+         //now jump over the rest of this segment
+         File.Skip(i);
+
+       }
+     }
+   }
+
+   //if(File.GetPos() <= mySize && hasAPP0 && hasDQT && hasDHT && hasSOF && hasSOS) {
+   if(File.GetPos() <= mySize && hasDQT && hasDHT && hasSOF && hasSOS) {
+     // This means that the required image segments have all been accounted for
+     // in a valid JPG, the last segment MUST be the Start of Scan
+     // After the SOS should follow the JPG Image Data
+
+     long myPos = File.GetPos();
+     SegmentSize = myPos - StartAt;
+     long val = mySize - myPos;
+
+     _observer.WriteDebug("JpgClass", "", true);
+     _observer.WriteDebug("JpgClass", "Calling SearchFile (" + myPos + ", " + val + ")", true);
+
+     SearchFile(File, myPos);
+
+     CheckImageData(File, myPos, ImageDataSize);
+
+   } else {
+     // This means that the required image segments were NOT present, and therefore the image is INVALID
+     myReturn = false;
+     UseThisLength = 0;
+   }
+
+    // Evaluate the Image Dimensions
+    if(imgHeight == 0 || imgWidth == 0){
+      myReturn = false;
+      _observer.WriteDebug("JpgClass", "Invalid File Dimensions: " + imgWidth + " x " + imgHeight, true);
+    }
+
+    if(myReturn){
+      UseThisLength = ImageDataSize + SegmentSize;
+      _observer.WriteDebug("JpgClass", "", true);
+      _observer.WriteDebug("JpgClass", "\yReturn = true.  File Length = " + (ImageDataSize + SegmentSize, true)
+                                                            + "("  + ImageDataSize + " & " + SegmentSize + ")", true);
+
+
+      // ascertain the image aspect ratio
+      double tempH = imgHeight;
+      double tempW = imgWidth;
+      if(tempW > tempH)
+        _aspectRatio = tempW / tempH;
+      else
+        _aspectRatio = tempH / tempW;
+
+      _observer.WriteDebug("JpgClass", "Bit Depth  = " + _bitDepth, true);
+      _observer.WriteDebug("JpgClass", "Img Width  = " + imgWidth, true);
+      _observer.WriteDebug("JpgClass", "Img Height = " + imgHeight, true);
+      _observer.WriteDebug("JpgClass", "Aspect Rat = " + _aspectRatio, true);
+      _observer.WriteDebug("JpgClass", "Carve Size = " + UseThisLength, true);
+
+    } else {
+      _observer.WriteDebug("JpgClass", "", true);
+      _observer.WriteDebug("JpgClass", "myReturn = false. File Length = " + UseThisLength, true);
+    }
+
+    return UseThisLength;
+  }
+
+
+}

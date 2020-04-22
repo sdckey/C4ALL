@@ -1,0 +1,23 @@
+class CarveClass {
+
+  MemoryFileClass MF;
+  EntryClass      Entry;
+
+  long            FileLength,
+                  Offset;
+  String          Extension,
+                  MetaData,
+                  Monikers;
+
+#ifndef VERSION_6
+  void GetMonikers()
+  {
+    ItemMonikerClass moniker();
+    if (Entry.GetItemMoniker(moniker))
+    {
+      Monikers = String::Format("{0}:{1}:{2}", moniker.Primary, moniker.Device, moniker.Item);
+    }
+  }
+#endif
+
+}

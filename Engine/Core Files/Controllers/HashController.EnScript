@@ -1,0 +1,16 @@
+class HashController {
+
+  SearchClass Search;
+
+  HashController()
+  {
+    Search = new SearchClass();
+    Search.Create();
+  }
+
+  String GetMd5Hash(FileClass f, long length){
+    String hash = Search.ComputeHash(f, length);
+
+    return hash;
+  }
+}

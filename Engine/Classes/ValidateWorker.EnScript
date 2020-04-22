@@ -1,0 +1,239 @@
+include "..\\ActivePlugins"
+include "..\\Core Files\\Controllers\\ConsoleController"
+include "..\\Core Files\\Controllers\\MainController"
+include "..\\Core Files\\Controllers\\HelpController"
+include "SqliteWorker"
+
+include "OptionsClass"
+
+
+class ValidateWorker {
+
+  LocalFileClass    dbFile;
+
+  ActivePlugins     MyActivePlugins;
+  ConsoleController MyConsole;
+  HelpController    MyHelp;
+  OptionsClass      MyOptions;
+  MainController    MyMain;
+  SqliteWorker      MySqlite;
+
+  ValidateWorker(OptionsClass myOptions, HelpController myHelp, ActivePlugins myActivePlugins, MainController mc):
+    MyOptions = myOptions,
+    MyHelp = myHelp,
+    MyActivePlugins = myActivePlugins,
+    MyMain = mc
+  {
+    MyConsole = new ConsoleController(MyOptions);
+    MySqlite = new SqliteWorker();
+    MySqlite.Connect(MyOptions.SqlitePath);
+  }
+
+  ~ValidateWorker()
+  {
+    //if(MySqlite) MySqlite.Close();
+    MySqlite = null;
+  }
+
+#ifdef VERSION_6
+  EntryClass FindByForce(HitClass h, CaseClass c){
+    forall(EntryClass e in c.EntryRoot()){
+      if(e.FullPath() == c.Name() + "\\" + h.DeviceName + "\\" + h.FullPath){
+        if(e.PhysicalSector() == h.PhysicalSector)
+          return e;
+      }
+    }
+    return null;
+  }
+
+  EntryClass FindByPath(HitClass h, CaseClass c){
+    EntryClass e = c.EntryRoot();
+    e = e.Find(h.DeviceName + "\\" + h.FullPath);
+    if(e){
+      if(e.PhysicalSector() == h.PhysicalSector)
+        return e;
+    }
+    return null;
+  }
+
+  EntryClass FindByDisk(HitClass h, CaseClass c){
+    DeviceClass d;
+    foreach(DeviceClass dev in c.DeviceRoot()){
+      if(dev.Name() == h.DeviceName){
+        d = dev;
+        break;
+      }
+    }
+
+    if(d){
+      // Attempt to find this record via Device View
+      long fileoffset = h.Offset;
+      long sector = h.PhysicalSector;
+      uint offset;
+
+      EntryClass e = d.GetEntry(sector, offset, fileoffset);
+
+      if(e){
+        if(e.FullPath() == c.Name() + "\\" + h.DeviceName + "\\" + h.FullPath)
+          return e;
+      }
+    } else
+      Console.WriteLine("\nDEVICE NOT FOUND: " + h.DeviceName);
+
+    return null;
+  }
+#else
+// Version 7 shit goes here
+#endif
+
+
+  void Start()
+  {
+    MyConsole.WriteLine("");
+    MyConsole.WriteLine("ValidateWorker Started");
+
+    Console.Write("Loading search hits...");
+
+    // Rebuild the Indexes first!!
+
+    HitClassArray hits = MySqlite.GetHits();
+    Console.WriteLine("done.  " + hits.Count() + " hits to process.");
+
+    EntryClass     lastEntry;
+    EntryFileClass lastEf;
+    long           lastOffset;
+    long           rangeToIgnore;
+
+    for(int i = 0; i < hits.Count(); i++)
+    {
+      HitClass h = hits[i];
+
+      // Decide if we are going to look at this search hit
+      bool checkThisHit = true;
+
+      if(MyOptions.TriageValidateAction == 0){
+        // 0 = Live Allocated
+        if(h.Offset > 0)
+          checkThisHit = false;
+      }
+      else if(MyOptions.TriageValidateAction == 1){
+        // 1 = Embedded
+        if(h.Offset == 0 || h.FullPath.Contains("Unallocated Clusters"))
+          checkThisHit = false;
+      }
+      else if(MyOptions.TriageValidateAction == 2){
+        // 2 = Allocated
+        if(h.FullPath.Contains("Unallocated Clusters"))
+          checkThisHit = false;
+      }
+      else if(MyOptions.TriageValidateAction == 3){
+        // 3 = Unallocated
+        if(!h.FullPath.Contains("Unallocated Clusters"))
+          checkThisHit = false;
+      }
+      else if(MyOptions.TriageValidateAction == 4){
+        // 4 = Everywhere
+      }
+
+      if(!checkThisHit)
+      {
+        // Even though we don't want to look at this particular hit, we still need to
+        // figure out if we should EVER look at this particular hit.
+        //
+        // We only care if this hit was from the same entry as the previous hit...
+        if(lastEntry)
+        {
+          if(h.PhysicalSector == lastEntry.PhysicalSector())
+          {
+            if(h.Offset < lastEf.GetPos()){
+                MySqlite.UpdateHit(h, 2);  // Update the database to show this hit as SKIPPED
+            }
+          }
+        }
+      }
+      else
+      {
+        Console.WriteLine("Processing search hit: " + h.FullPath + ", Offset: " + h.Offset);
+
+        EntryClass     e;
+        EntryFileClass ef;
+
+        // Is this entry the same one as before?
+        if(lastEntry)
+        {
+          if(h.PhysicalSector == lastEntry.PhysicalSector())
+          {
+            // Same entry
+            e = lastEntry;
+            ef = lastEf;
+          }
+        }
+
+        if(!e)
+        {
+          // New Entry
+          // 1.  Find using the Path
+          e = FindByPath(h, MyOptions.Case);
+
+          // 2.  Try using the Disk
+          if(!e)
+            e = FindByDisk(h, MyOptions.Case);
+
+          // 3.  Try brute force
+          if(!e)
+            e = FindByForce(h, MyOptions.Case);
+
+          lastEntry = e;
+          lastOffset = 0;
+          rangeToIgnore = 0;
+
+          if(e)
+          {
+            ef = new EntryFileClass();
+            ef.Open(e, FileClass::SLACK);
+            ef.SetCodePage(CodePageClass::ANSI);
+            lastEntry = e;
+            lastEf = ef;
+          }
+        }
+
+        if(e)
+        {
+          String msg;
+          if(MyMain.MyPictureOutput && MyMain.MyMovieOutput)
+            msg = "Found " + MyMain.MyPictureOutput.FileCount + " pics, " + MyMain.MyMovieOutput.FileCount + " movs. hit " + i + "/" + hits.Count();
+          else if(MyMain.MyPictureOutput)
+            msg = "Found " + MyMain.MyPictureOutput.FileCount + ". hit " + i + "/" + hits.Count();
+          else if(MyMain.MyMovieOutput)
+            msg = "Found " + MyMain.MyMovieOutput.FileCount + " movs. hit " + i + "/" + hits.Count();
+
+          if(h.Offset >= ef.GetPos()){
+            MySqlite.UpdateHit(h, 1);  // Update the database to show this hit as CHECKED
+            ef.Seek(h.Offset);
+
+            if(MyOptions.Debug){
+              if(MyMain.MyMovieOutput) MyMain.MyMovieOutput.WriteDebug("SearchController", "Search Hit " + i + "/" + hits.Count() + ", OFF: " + ef.GetPos());
+              if(MyMain.MyPictureOutput) MyMain.MyPictureOutput.WriteDebug("SearchController", "Search Hit " + i + "/" + hits.Count() + ", OFF: " + ef.GetPos());
+            }
+
+            // Call another function, which will analyse the hit and decide what format to validate with
+            PluginInterface pi = MyActivePlugins.GetPlugin(h.PluginName); // have to get the plugin.
+
+            long skipLength = MyMain.MySearch.CheckHit(e, pi, h.Offset, "");
+
+            // Skip length tells us what records in the search hit list that we should be ignoring
+            rangeToIgnore = skipLength;
+            ef.Skip(skipLength);
+
+          }
+          else
+            MySqlite.UpdateHit(h, 2);  // Update the database to show this hit as SKIPPED
+        }
+        else
+          Console.WriteLine("Could not conjure up the Entry!");
+      }
+    }
+    MySqlite.Close();
+    MyConsole.WriteLine("End");
+  }
+}

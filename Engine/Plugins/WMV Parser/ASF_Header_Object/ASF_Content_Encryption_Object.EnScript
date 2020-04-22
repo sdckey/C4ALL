@@ -1,0 +1,69 @@
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+class ASF_Content_Encryption_Object{
+
+  ulong  ObjectId1;
+  ulong  ObjectId2;
+  long   ObjectSize;
+  long   SecretDataLength;
+//  long   SecretData;
+  long   ProtectionTypeLength;
+  String ProtectionType;
+  long   KeyIdLength;
+  String KeyId;
+  long   LicenceURLLength;
+  String LicenceURL;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  ASF_Content_Encryption_Object(const String &thePluginName, ObserverInterface theObserver){
+    _pluginName = thePluginName;
+    _observer = theObserver;
+  }
+
+  void Read(EntryFileClass ef, const long &offset){
+    ef.Seek(offset);
+
+    ObjectId1 = ef.ReadBinaryInt(8, true);
+    ObjectId2 = ef.ReadBinaryInt(8, true);
+    ObjectSize = ef.ReadBinaryInt(8, false);
+
+    if(offset + ObjectSize < ef.GetSize()){
+
+      SecretDataLength = ef.ReadBinaryInt(4, false);
+      ef.Skip(SecretDataLength);
+
+      ProtectionTypeLength = ef.ReadBinaryInt(4, false);
+
+      long pos = ef.GetPos();
+      ef.ReadString(ProtectionType, ProtectionTypeLength);
+      ef.Seek(pos + ProtectionTypeLength);
+      KeyIdLength = ef.ReadBinaryInt(4, false);
+
+      pos = ef.GetPos();
+      ef.ReadString(KeyId, KeyIdLength);
+      ef.Seek(pos + KeyIdLength);
+      LicenceURLLength = ef.ReadBinaryInt(4, false);
+
+      pos = ef.GetPos();
+      ef.ReadString(LicenceURL, LicenceURLLength);
+      ef.Seek(pos + LicenceURLLength);
+
+      _observer.WriteDebug(_pluginName, "    ASF_Content_Encryption_Object", false);
+      _observer.WriteDebug(_pluginName, "    ============================", false);
+      _observer.WriteDebug(_pluginName, "      Offset: " + offset, false);
+      _observer.WriteDebug(_pluginName, "      Object Size: " + ObjectSize, false);
+      _observer.WriteDebug(_pluginName, "      Secret Data Length: " + SecretDataLength, false);
+      _observer.WriteDebug(_pluginName, "      Protection Type: " + ProtectionType, false);
+      _observer.WriteDebug(_pluginName, "      Key ID: " + KeyId, false);
+      _observer.WriteDebug(_pluginName, "      Licence URL: " + LicenceURL, false);
+      _observer.WriteDebug(_pluginName, "  ", false);
+    }
+    else {
+      _observer.WriteDebug(_pluginName, "Not enough data to read the contents of this object.", false);
+    }
+
+    ef.Seek(offset + ObjectSize);
+  }
+}

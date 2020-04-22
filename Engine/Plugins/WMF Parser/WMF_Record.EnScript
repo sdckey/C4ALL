@@ -1,0 +1,33 @@
+include "..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+class WMF_Record{
+  bool   DataSkipped;
+  bool   IsValid;
+  bool   IsLikelyAPicture;
+
+  long   RecordSize;
+  long   RecordFunction;
+  long   ShouldBeSize;
+
+  String RecordType;
+
+  ObserverInterface _observer;
+
+
+  void WriteDebug(const String &val){
+    _observer.WriteDebug("WMF_Plugin\\WMF_Record", val, true);
+  }
+
+
+  WMF_Record(ObserverInterface theObserver, FileClass fc){
+    _observer = theObserver;
+
+    IsValid = true;
+    DataSkipped = false;
+    IsLikelyAPicture = false;
+    ShouldBeSize = -1;
+
+    RecordSize = fc.ReadBinaryInt(4, 0);        // the number of 16-bit WORDS in this record
+    RecordFunction = fc.ReadBinaryInt(2, 0);    // the record type.
+  }
+}

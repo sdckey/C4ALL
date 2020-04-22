@@ -1,0 +1,99 @@
+/*
+  This is the Base Class / Interface that all developed Plugins must adhere to.
+  This will allow an infinite number of plugins to be used
+  by the MainForm script without changing the MainForm
+*/
+
+include "ObserverInterface"
+
+class PluginInterface{
+
+  // Observer is going to be the main script - this is how the plugins can communicate back "up" the chain
+  ObserverInterface _observer;
+  virtual void SetObserver(ObserverInterface o){
+    _observer = o;
+  }
+  // I don't want developers to be bothered by the observer stuff - they just call these base methods
+  //   and I'll forward it on to the observer, which will in turn forward it to the execting script
+  void WriteDebug(const String &source, const String &message, int type){
+    _observer.WriteDebug(source, message, type);
+  }
+  void RaiseMessage(const String &title, const String &message){
+    _observer.RaiseMessage(title, message);
+  }
+  void SetRange(const String &msg, long size){
+    _observer.SetRange(msg, size);
+  }
+  void SetStatusMessage(const String &msg){
+    SystemClass::StatusMessage(msg);
+  }
+  void WriteFullLine(const String &val){
+    _observer.WriteFullLine(val);
+  }
+  void WritePartLine(const String &val){
+    _observer.WritePartLine(val);
+  }
+  void WriteEndLine(const String &val){
+    _observer.WriteEndLine(val);
+  }
+  void WriteLine(const String &val){
+    _observer.WriteLine(val);
+  }
+
+
+
+
+  // ================================================================================================
+  // Below are interface methods - they must be implemented in the plugins.
+  // ======================================================================
+  pure String Version();
+  pure MemoryFileClass GetMemoryFileClass();
+
+  // Enabled is whether the user has checked to include this plugin in the search
+  pure bool Enabled();
+  pure void SetEnabled(const bool &val);
+
+  // the "Extension" property - the format's extension, used in the Dialog and for naming extractions
+  pure String Extension();
+  pure void SetExtension(const String &val);
+
+  // the "Header" property - the format's signature
+  pure String Header();
+  pure void SetHeader(const String &val);
+  pure int HeaderIndex();
+  pure void SetHeaderIndex(int val);
+
+  // the "Metadata" property - typically EXIF data
+  pure String MetaData();
+
+  // the plugin's options dialog
+  pure DialogClass GetDialog(DialogClass parent);
+
+  // the Access point to actually conduct a search
+  // This function will return the LENGTH of data to be extracted
+  pure long Validate(EntryClass e, long offset);
+
+  // a call to tell the plugin to 'commit' any settings they track via EnCase
+  pure void SaveSettings();
+
+
+  // the name of the plugin, mostly used for debug output
+  pure String PluginName();
+  pure void SetPluginName(const String &val);
+
+
+  // some file formats have headers that actually occur some bytes into the file.
+  pure long BytesPrecedingHeader();
+
+
+  // specify a range of data that the Plugin has identified as "safe to ignore" for any search hits
+  // Example:  ignore all of the mpg packet search hits, or JPG embedded thumbnails
+  pure long RangeToIgnoreSearchHits();
+
+
+  // specify, for this particular file type, what size, in bytes, constitutes a 'small' file
+  pure long SmallFileLimit();
+
+
+
+}

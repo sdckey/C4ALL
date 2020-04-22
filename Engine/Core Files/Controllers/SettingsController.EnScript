@@ -1,0 +1,91 @@
+include "..\\..\\Classes\\OptionsClass"
+
+
+class SettingsController {
+
+  OptionsClass MyOptions;
+
+  SettingsController(OptionsClass myOptions):
+    MyOptions = myOptions
+  {
+    // Record the starting date and time
+    DateClass d;
+    d.Now();
+    MyOptions.StartDate = d.GetString("dd-MMM-yyyy", "", DateClass::GetTimeZoneBias());
+    MyOptions.StartTime = d.GetString("", "HH-mm-ss", DateClass::GetTimeZoneBias());
+
+    // And then read from storage
+    ReadSettings();
+  }
+
+  String CheckName(String name){
+    if(name.SubString(name.GetLength()-1, 1) == " ")
+      name = name.SubString(0, name.GetLength()-1);
+    return name;
+  }
+
+  void SetCaseName(String name){
+    name = CheckName(name);
+    MyOptions.CaseName = name;
+  }
+
+
+  void StorageValues(StorageClass myStorage){
+    myStorage.Value("dbType", MyOptions.DbType);
+    myStorage.Value("dbName", MyOptions.DbName);
+    myStorage.Value("dbPath", MyOptions.DbPath);
+    myStorage.Value("server", MyOptions.ServerName);
+    myStorage.Value("login", MyOptions.LoginName);
+    myStorage.Value("password", MyOptions.Password);
+    myStorage.Value("makeLibrary", MyOptions.MakeLibrary);
+    myStorage.Value("libraryPath", MyOptions.LibraryPath);
+    myStorage.Value("ExportByHash", MyOptions.ExportByHash);
+    myStorage.Value("BookmarkExcludedPreCat", MyOptions.BookmarkExcludedPreCat);
+    myStorage.Value("ExcludePreCatVal", MyOptions.ExcludePreCatVal);
+    myStorage.Value("ODBCstring", MyOptions.ODBCstring);
+    myStorage.Value("IgnoreFailedExtract", MyOptions.IgnoreFailedExtract);
+    myStorage.Value("SaveConsole", MyOptions.SaveConsole);
+    myStorage.Value("IgnoreSmall", MyOptions.IgnoreSmall);
+    myStorage.Value("CreateLef", MyOptions.CreateLef);
+  }
+
+
+  // Load in data from the local machine and from this case
+  void ReadSettings(){
+
+    // Local Settings first
+    StorageClass myStorage("C4P Community v4", 0);
+    StorageValues(myStorage);
+
+
+    // Case Settings next
+    MyOptions.CaseName = MyOptions.Case.Name();
+    if(MyOptions.CaseName.SubString(MyOptions.CaseName.GetLength()-1, 1) == " ")
+      MyOptions.CaseName = MyOptions.CaseName.SubString(0, MyOptions.CaseName.GetLength()-1);
+
+
+    MyOptions.CopyProtected = true;
+#ifdef VERSION_6
+    MyOptions.ForensicAnalyst = MyOptions.Case.Examiner();
+#else
+    // If the Case has CaseInfoItems, then read through them, looking for "Examiner Name"
+    MyOptions.ForensicAnalyst = "";
+    if(MyOptions.Case.HasCaseInfoList()){
+      forall(CaseInfoClass ci in MyOptions.Case.CaseInfoRoot()){
+        if(ci.Name() == "Examiner Name"){
+          MyOptions.ForensicAnalyst = ci.Value();
+          break;
+        }
+      }
+    }
+#endif
+    MyOptions.SearchSelected = false;
+    MyOptions.MakeBookmarks = false;
+    MyOptions.ReportPath = MyOptions.Case.ExportFolder();
+  }
+
+  void SaveSettings() {
+    StorageClass myStorage("C4P Community v4", StorageClass::WRITE);
+    StorageValues(myStorage);
+  }
+}

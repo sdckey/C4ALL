@@ -1,0 +1,220 @@
+include "..\\Core Files\\Interfaces\\PicturePluginInterface"
+include "..\\Core Files\\Models\\RtfDecoderClass"
+
+include "WMF Parser\\WmfBase"
+
+class WmfRtfPlugin;
+
+class WmfRtfDialog: DialogClass{
+
+  CheckBoxClass    chkEnabled;
+  StaticTextClass  txtInfo;
+  LongEditClass    lngMin;
+  LongEditClass    lngMax;
+  StaticTextClass  txtAuthor;
+
+
+  WmfRtfDialog(DialogClass parent, WmfRtfPlugin plug):
+    DialogClass      (parent, "WMF Embedded in RTF File Settings:"),
+      chkEnabled     (this, "Search for Embedded WMF Files",
+                                        10,  10, 100, 12, 0, plug._enabled),
+      txtInfo        (this, "Blah blah blah blah blah blah blah.",
+                                        10,  25, 220, 50, 0),
+      lngMin         (this, "Minimum allowed Sample size (in bytes). (0 - 1,000,000)",
+                                        10,  85, 100, 12, 0, plug._wmfMin, 0, 1000000, WindowClass::REQUIRED),
+      lngMax         (this, "Maximum allowed Sample size (in bytes). (10,000,000 - 10,000,000,000)",
+                                        10, 120, 100, 12, 0, plug._wmfMax, 10000000, 10000000000, WindowClass::REQUIRED),
+      txtAuthor      (this, "Plugin developed by:\r\n" +
+                            "\r\n" +
+                            "Your Name\r\n" +
+                            "Your Section\r\n" +
+                            "Your Organization\r\n" +
+                            "Your Email",
+                                        175, 175, 100, 50, 0)
+  {
+  }
+}
+
+class WmfRtfPlugin:PicturePluginInterface{
+
+  WmfRtfDialog   _dlg;
+
+  bool        _enabled;
+
+  double      _aspectRatio;
+  double      _bitDepth;
+
+  int         _headerIndex;
+
+  long        _wmfMax;
+  long        _wmfMin;
+  long        _rangeToIgnoreSearchHits;
+
+  MemoryFileClass _mf;
+
+  String      _extension;
+  String      _header;
+  String      _metaData;
+  String      _pluginName;
+  String      _version;
+
+  WmfRtfPlugin()
+  {
+    _pluginName = "C4P Plugin - Embedded WMF";
+    _enabled = true;
+    _extension = "WMF";
+    _header = "\\x30\\x31\\x30\\x30\\x30\\x39\\x30\\x30\\x30\\x30\\x30[\\x31|\\x33]";
+    _metaData = "";
+    _wmfMin = 0;
+    _wmfMax = 1000000000;
+    _loadSettings();
+
+    _version = "1.0.0";
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("Wmf2Enabled", _enabled);
+    myStorage.Value("Wmf2Min", _wmfMin);
+    myStorage.Value("Wmf2Max", _wmfMax);
+  }
+
+  long _validate(EntryClass e, long offset){
+    _metaData = "";
+
+    // Open the Entry and jump to the search hit location
+    EntryFileClass ef();
+    ef.Open(e, FileClass::SLACK);
+    ef.SetCodePage(CodePageClass::ANSI);
+    ef.Seek(offset);
+
+    // Specify the largest possible size this file could be, based on the available data
+    long maxSize = _wmfMax;
+    long upperSize = e.PhysicalSize();
+
+    // Deleted files will show a larger LogicalSize, so watch for that
+    if(e.LogicalSize() > e.PhysicalSize()) upperSize = e.LogicalSize();
+
+    // Limit the file accordingly
+    if(maxSize > upperSize)
+      maxSize = upperSize;
+
+    // Convert the file from clear-text encoding to binary
+    RtfDecoderClass decoder(_observer);
+
+    // Set the Picture Interface's MemoryFileClass Object accordingly
+    _mf = decoder.ConvertRtfData(ef, offset, _wmfMax);
+
+    if(_mf){
+      /*
+      LocalFileClass lf();
+      lf.Open("d:\\trash\\blah.wmf", FileClass::WRITE);
+      lf.WriteBuffer(_mf, _mf.GetSize());
+      lf.Close();
+      */
+      _mf.Seek(0);
+
+      // Pass the resulting data to the base Plugin for evaluation
+      WmfBase base(_observer);
+      long carveSize = base.Validate(_mf, 0);
+      _mf.Seek(0);
+
+      if (carveSize > _wmfMax){
+        WriteDebug("WmfRtfPlugin", "File Validated Size (" + carveSize + ") exceeds Plugin Maximum (" + _wmfMax + ").  Data will be truncated.", true);
+        _rangeToIgnoreSearchHits = _wmfMax;
+        _mf.Close();
+        return _wmfMax;
+      }
+      else if (carveSize < _wmfMin){
+        if(carveSize != -1) WriteDebug("WmfRtfPlugin", "File Validated Size (" + carveSize + ") is smaller than the Plugin Minimum.  Data will be ignored", true);
+        _mf.Close();
+        _rangeToIgnoreSearchHits = -1;
+        return -1;
+      }
+      else {
+        _rangeToIgnoreSearchHits = carveSize * 2;    // the range to ignore is double the decoded file size
+        return carveSize;
+      }
+    }
+    else {
+      WriteDebug("WmfRtfPlugin", "Data could not be decoded.", true);
+      _rangeToIgnoreSearchHits = -1;
+      if(_mf) _mf.Close();
+      return -1;
+    }
+  }
+
+
+  // ==============================================
+  // Interface methods
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return _mf;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+  virtual double AspectRatio(){
+    return _aspectRatio;
+  }
+  virtual double BitDepth(){
+    return _bitDepth;
+  }
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+  virtual String MetaData(){
+    return _metaData;
+  }
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new WmfRtfDialog(parent, this);
+    return _dlg;
+  }
+  virtual long Validate(EntryClass e, long offset){
+    return _validate(e, offset);
+  }
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 10240;  // 10kb
+  }
+  // ==============================================
+}

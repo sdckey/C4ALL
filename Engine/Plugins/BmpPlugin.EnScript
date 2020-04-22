@@ -1,0 +1,303 @@
+include "..\\Core Files\\Interfaces\\PicturePluginInterface"
+
+class BmpPlugin;
+
+
+// Dialog Class exposing variables specific to this format
+class BmpDialog: DialogClass {
+
+  CheckBoxClass   chkBmp;
+  StaticTextClass txtBMP;
+  LongEditClass   lngMin;
+  StaticTextClass  txtAuthor;
+
+  BmpDialog(DialogClass parent, BmpPlugin bmp) :
+    DialogClass    (parent, "BMP Settings:"),
+      chkBmp       (this, "Search for BMPs", 10, 10, 100, 12, 0, bmp._enabled),
+      txtBMP       (this, "All BMP Files will be exported based on File Size tag inside the Header.", 10,  25,  220,  50, 0),
+      lngMin       (this, "Minimum extracted BMP size (in bytes). (0 - 10000000)", 10, 115, 100, 12, 0,
+                           bmp._bmpMin, 0, 10000000, WindowClass::REQUIRED),
+      txtAuthor      (this, "Plugin developed by:\r\n" +
+                            "\r\n" +
+                            "Trevor Fairchild\r\n" +
+                            "Electronic Crime Section\r\n" +
+                            "Ontario Provincial Police\r\n" +
+                            "C4P@e-crime.on.ca",
+                                        175, 175, 100, 50, 0)
+  {
+  }
+}
+
+
+// Actual Format class, which implements the PicturePluginInterface
+class BmpPlugin:PicturePluginInterface{
+
+
+  BmpDialog         _dlg;
+
+  bool              _enabled;
+
+  double            _aspectRatio;
+  double            _bitDepth;
+
+  int               _headerIndex;
+
+  long              _bmpMax;
+  long              _bmpMin;
+  long              _rangeToIgnoreSearchHits;
+
+  String            _extension;
+  String            _header;
+  String            _metaData;
+  String            _pluginName;
+  String            _version;
+
+
+  // Plugin's Constructor, where the base values are set and any readable values
+  //   are loaded from the Storage file
+  BmpPlugin()
+  {
+    _pluginName = "C4P Plugin - BMP";
+    _enabled = true;
+    _extension = "BMP";
+    _header = "\\x42\\x4D....\\x00\\x00\\x00\\x00....\\x28";
+    _metaData = "";
+    _bmpMin = 0;
+    _bmpMax = 20000000;  // 20 MB maximum, hard-coded.  Minimum can be anywhere from 0 to 10MB
+    _loadSettings();
+
+    _version = "1.0.0";
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("bmpEnabled", _enabled);
+    myStorage.Value("bmpMin", _bmpMin);
+    myStorage.Value("bmpMax", _bmpMax);
+  }
+
+  long _validate(EntryClass e, long offset){
+
+    // Reset the classwide variables
+    _aspectRatio = 0;
+    _bitDepth = 0;
+    _metaData = "";
+
+    long     carveSize;
+    long     searchSize;
+    double   imgWidth,
+             imgHeight;
+
+    // Initialize variables
+    _aspectRatio = 0;
+    _bitDepth = 0;
+    searchSize = _bmpMin + offset;
+
+    WriteDebug("BmpClass", "Validate Commence", true);
+
+    EntryFileClass ef();
+
+    #ifdef VERSION_6
+      ef.Open(e, FileClass::SLACK);
+    #else
+      ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
+    #endif
+
+    if(ef){
+      ef.Seek(offset);
+
+      // =======================================================================================
+      // WinBMPFileHeader - this is the same for Bitmap 2.x, 3.x and other subsequent variations
+
+      // FileType ("BM")
+      ef.Skip(2);
+
+      // FileSize (4 bytes)
+      carveSize = ef.ReadBinaryInt(4, false);
+      WriteDebug("BmpClass", "BMP Length Marker = " + carveSize, true);
+
+      // Reserved 1 (2 bytes) & Reserved 2 (2 bytes)
+      ef.Skip(4);
+
+      // BitmapOffset (4 bytes)
+      ef.ReadBinaryInt(4, false);
+
+      // =======================================================================================
+      // BitmapHeader
+
+      // Size (4 bytes)
+      long headerSize = ef.ReadBinaryInt(4, false);
+
+      if(headerSize == 12){
+        // BMP v2.x has 2 byte values for the height and width
+
+        // Width (2 bytes)
+        imgWidth = ef.ReadBinaryInt(2, false);
+        if(imgWidth < 0)
+          imgWidth = imgWidth * -1;
+
+        //Height (2 bytes)
+        imgHeight = ef.ReadBinaryInt(2, false);
+        if(imgHeight < 0)
+          imgHeight = imgHeight * -1;
+
+        // Planes (2 bytes)
+        ef.Skip(2);
+
+        // BitsPerPixel (2 bytes)
+        _bitDepth = ef.ReadBinaryInt(2, false);
+
+      } else {
+        // BMP v3.x and higher have 4 byte values for the height and width
+
+        // Width (4 bytes)
+        imgWidth = ef.ReadBinaryInt(4, false);
+        if(imgWidth < 0)
+          imgWidth = imgWidth * -1;
+
+        //Height (4 bytes)
+        imgHeight = ef.ReadBinaryInt(4, false);
+        if(imgHeight < 0)
+          imgHeight = imgHeight * -1;
+
+        // Planes (2 bytes)
+        ef.Skip(2);
+
+        // BitsPerPixel (2 bytes)
+        _bitDepth = ef.ReadBinaryInt(2, false);
+      }
+
+      // Evaluate the BitDepth marker - to verify this is a real bitmap file
+      if(_bitDepth == 1 || _bitDepth == 4 || _bitDepth = 8 || _bitDepth == 24){
+      } else {
+        WriteDebug("BmpClass", "Invalid bitDepth: " + _bitDepth, true);
+        carveSize = 0;
+      }
+
+      // Evaluate the reported size of the file - to verify this is a likely file
+      if(carveSize <= _bmpMin){
+        carveSize = 0;
+        WriteDebug("BmpClass", "BMP file less than specified minimum - hit ignored.", true);
+      }
+      else if(carveSize > _bmpMax){
+        carveSize = 0;
+        WriteDebug("BmpClass", "BMP file exceeds maximum of " + _bmpMax, true);
+      }
+
+      // Evaluate the Image Dimensions
+      if(imgHeight == 0 || imgWidth == 0){
+        carveSize = 0;
+        WriteDebug("BmpClass", "Invalid File Dimensions: " + imgWidth + " x " + imgHeight, true);
+      } else {
+        // ascertain the image aspect ratio
+        double tempH = imgHeight;
+        double tempW = imgWidth;
+        if(tempW > tempH)
+          _aspectRatio = tempW / tempH;
+        else
+          _aspectRatio = tempH / tempW;
+      }
+
+      WriteDebug("BmpClass", "File Size  = " + carveSize, true);
+      WriteDebug("BmpClass", "Bit Depth  = " + _bitDepth, true);
+      WriteDebug("BmpClass", "Width      = " + imgWidth, true);
+      WriteDebug("BmpClass", "Height     = " + imgHeight, true);
+      WriteDebug("BmpClass", "Aspect Rat = " + _aspectRatio, true);
+
+    }    else
+      WriteFullLine("Failed to open entry: " + e.FullPath());
+
+
+    WriteDebug("BmpClass", "carveSize result = " + carveSize, true);
+
+    _rangeToIgnoreSearchHits = carveSize;
+    return carveSize;
+  }
+
+
+
+
+  // =======================================================================================
+  // Interface Functions that MUST be present and SHOULD tie in with the rest of your script
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return null;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+
+  virtual String MetaData(){
+    return _metaData;
+  }
+
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new BmpDialog(parent, this);
+    return _dlg;
+  }
+
+  virtual long Validate(EntryClass e, long offset){
+    return _validate(e, offset);
+  }
+
+  virtual double AspectRatio(){
+    return _aspectRatio;
+  }
+
+  virtual double BitDepth(){
+    return _bitDepth;
+  }
+
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 51200;  // 50kb
+  }
+  // =======================================================================================
+}
+

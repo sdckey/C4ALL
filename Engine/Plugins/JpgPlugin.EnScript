@@ -1,0 +1,210 @@
+/*
+version 1.0.2:
+ - fixed problem with _rangeToIgnoreSearchHits.  It was giving an offset back, but it needs to give back the number of bytes to skip.  Fixed in JpgBase
+
+version 1.0.1:
+ - added validation code to the DHT segment - to address JPG data which seems to fully comply with the structure, even beyond the DHT, and yet are not true
+   pictures.  The number of 'symbols' in the DHT is compared to the reported size of the segment to identify invalid data.
+*/
+
+include "..\\Core Files\\Interfaces\\PicturePluginInterface"
+include "JpgBase"
+
+
+class JpgPlugin;
+
+
+// Dialog Class exposing variables specific to this format
+class JpgDialog: DialogClass {
+
+  JpgPlugin        Jpg;
+
+  CheckBoxClass    chkJPG;
+  IntEditClass     intJPG;
+  LongEditClass    lngJPG;
+  StaticTextClass  txtJPG,
+                   txtPercentage;
+  CheckBoxClass    chkThumbs;
+  StaticTextClass  txtAuthor;
+
+  JpgDialog(DialogClass parent, JpgPlugin jpg) :
+    DialogClass    (parent, "JPG Settings:"),
+      chkJPG       (this, "Search for JPGs", 10, 10, 100, 12, 0, jpg._enabled),
+      txtJPG       (this, "All JPG Files must contain specified file segments.  After this data, where a valid footer " +
+                   "is found, the image will be exported accordingly.  Where no footer is found, the image " +
+                   "size will be based on the compression rate specified below:", 10,  25,  220,  50, 0),
+      intJPG       (this, "Assume a JPG Compression Ratio of", 10,  80,   40,  12, 0,
+                                                jpg.compressionRatio, 10, 90, WindowClass::REQUIRED),
+      txtPercentage(this, "% (10% - 90%)", 55,  92,   40,  12, 0),
+      lngJPG       (this, "Maximum allowed JPG size. (bytes: 0 - 100,000,000)", 10, 115, 100, 12, NUMBER,
+                                                jpg._jpgMax, 0, 100000000, WindowClass::REQUIRED),
+      chkThumbs    (this, "Export Embeddeded Thumbnails", 10, 150, 100, 12, 0, jpg._exportThumbs),
+      txtAuthor      (this, "Plugin developed by:\r\n" +
+                            "\r\n" +
+                            "Trevor Fairchild\r\n" +
+                            "Electronic Crime Section\r\n" +
+                            "Ontario Provincial Police\r\n" +
+                            "C4P@e-crime.on.ca",
+                                        175, 175, 100, 50, 0),
+      Jpg = jpg
+  {
+  }
+}
+
+
+// Actual Format class, which implements the PicturePluginInterface
+class JpgPlugin:PicturePluginInterface{
+
+
+  bool              _enabled;
+  bool              _exportThumbs;
+
+  double            _aspectRatio;
+  double            _bitDepth;
+
+  int               _headerIndex;
+  int               compressionRatio;
+
+  JpgDialog         _dlg;
+
+  long              _jpgMax;
+  long              _jpgMin;
+  long              _rangeToIgnoreSearchHits;
+
+  String            _extension;
+  String            _header;
+  String            _metaData;
+  String            _pluginName;
+  String            _version;
+
+
+  // Plugin's Constructor, where the base values are set and any readable values
+  //   are loaded from the Storage file
+  JpgPlugin()
+  {
+    _pluginName = "C4P Plugin - JPG";
+    _enabled = true;
+    _extension = "JPG";
+    _header = "\\xFF\\xD8\\xFF";
+    _metaData = "";
+    _loadSettings();
+    _jpgMin = 0;
+    _jpgMax = 20000000;
+    compressionRatio = 60;
+    _exportThumbs = false;
+    _loadSettings();
+
+    _version = "1.0.3";
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("jpgEnabled", _enabled);
+    myStorage.Value("jpgMin", _jpgMin);
+    myStorage.Value("jpgMax", _jpgMax);
+    myStorage.Value("compression", compressionRatio);
+    myStorage.Value("exportThumbs", _exportThumbs);
+  }
+
+  // =======================================================================================
+  // Interface Functions that MUST be present and SHOULD tie in with the rest of your script
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return null;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+
+  virtual String MetaData(){
+    return _metaData;
+  }
+
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new JpgDialog(parent, this);
+    return _dlg;
+  }
+
+  virtual long Validate(EntryClass e, long offset){
+
+    JpgBase jb(_observer);
+    jb._jpgMin = _jpgMin;
+    jb._jpgMax = _jpgMax;
+    jb.compressionRatio = compressionRatio;
+
+    long val = jb._validate(e, offset);
+    _aspectRatio = jb._aspectRatio;
+    _bitDepth = jb._bitDepth;
+    _metaData = jb._metaData;
+
+    if(_exportThumbs){
+      WriteDebug(_pluginName, "Export Thumbs option on.  RangeToIgnoreSearchHits set to 1", true);
+      _rangeToIgnoreSearchHits = 1;
+    }
+    else {
+      WriteDebug(_pluginName, "Export Thumbs option off.  RangeToIgnoreSearchHits set to " + jb.OffsetToStartOfScan, true);
+      _rangeToIgnoreSearchHits = jb.OffsetToStartOfScan;
+    }
+    return val;
+  }
+
+  virtual double AspectRatio(){
+    return _aspectRatio;
+  }
+
+  virtual double BitDepth(){
+    return _bitDepth;
+  }
+
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 2048;  // 2kb
+  }
+  // =======================================================================================
+}

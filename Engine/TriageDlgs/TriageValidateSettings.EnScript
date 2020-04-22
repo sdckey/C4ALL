@@ -1,0 +1,126 @@
+include "..\\Core Files\\Dialogs\\PluginListClass"
+include "..\\Core Files\\Dialogs\\AutoHandlerClass"
+include "..\\Core Files\\Dialogs\\TreeTableEditClassDialog"
+include "..\\Core Files\\Controllers\\HelpController"
+
+include "LibraryDialog"
+include "ODBCDialog"
+include "SQLDialog"
+
+class TriageValidateSettings : DialogClass {
+
+  OptionsClass      MyOptions;
+  ActivePlugins     MyActivePlugins;
+  HelpController    MyHelp;
+
+  GroupBoxClass     grpOutput;
+  PathEditClass     txtFolder;
+  StringEditClass   txtSqlite;
+  CheckBoxClass     chkBook;
+
+  RadioButtonClass  radSelection;
+
+  RadioButtonClass  radDatabase;
+  CheckBoxClass     chkLibrary;
+
+  GroupBoxClass     grpDebug;
+  CheckBoxClass     chkDebug;
+  CheckBoxClass     chkDebugCurr;
+  CheckBoxClass     chkIgnoreFailures;
+  StaticTextClass   txtDebug;
+
+  GroupBoxClass     grpCompile;
+  StaticTextClass   txtVersion;
+
+  ButtonClass       btnHelp;
+
+  TriageValidateSettings(DialogClass parent, OptionsClass myOptions, HelpController myHelp, ActivePlugins myActivePlugins) :
+      DialogClass    (parent, "C4All Triage: Main Setting"),
+
+      // C4P Disclosure Package Options
+      grpOutput    (this, "C4P/C4M Disclosure Package Options",  10,   8, 300, 86, 0),
+      txtFolder    (this, "Create Package here:",            30,  19, 260, 12, 0, myOptions.ReportPath, WindowClass::REQUIRED),
+      txtSqlite    (this, "Location of Search Hit Database:",30,  50, 260, 12, 0, myOptions.SqlitePath, 512, WindowClass::DISABLED),
+      chkBook      (this, "Create a Bookmark for every file that is extracted",
+                                                             40,  76, 150, 12, 0, myOptions.MakeBookmarks),
+      btnHelp      (this, "?",                              290,  10,  20, 12, 0),
+
+      // Validation Types - Left Pane
+      radSelection (this, "What would you like to Validate?",      10,  95, 150,200, 0, myOptions.TriageValidateAction,
+                          "Live search hits only\t" +
+                          "Embedded search hits only\t" +
+                          "All Allocated search hits\t" +
+                          "Unallocated search hits\t" +
+                          "All search hits"),
+
+      // Database & Library Options
+      radDatabase  (this, "Pre-Categorization Options:",    180,  95, 130, 85, 0, myOptions.DbType, "No Database\tSQL Server\tmySQL"),
+      chkLibrary   (this, "Populate Picture Library",       190, 179, 110, 12, 0, myOptions.MakeLibrary),
+
+      // Debug Options
+      grpDebug     (this, "Debugging Options:",             170, 195, 140, 85, 0),
+      chkDebug     (this, "Run in Debug Mode",              185, 205, 100, 12, 0, myOptions.Debug),
+      chkDebugCurr (this, "Save Current Entry Only",        185, 220, 100, 12, 0, myOptions.DebugCurrentOnly),
+      chkIgnoreFailures(this, "Bookmark Failed Extracts",   185, 235, 100, 12, 0, myOptions.IgnoreFailedExtract),
+      txtDebug     (this, "FYI:  Debug = Slow",             185, 260,  20, 12, 0),
+
+      // Bottom pane Script Details
+      grpCompile   (this, "Script Details:",                 10, 285, 300, 75, 0),
+      txtVersion   (this, "Special Note:  Anti-Virus programs can wind up deleting or quarantining\n" +
+                          "files that are exported by this EnScript.  Forewarned is forearmed.\n\n" +
+                          "                       " + myOptions.Comments + "\n" +
+                          "                                 Compile Date: " + MyOptions.CompileDate + "\n" +
+                          "                                    EnScript Version: " + myOptions.VersionNum,
+
+                                                             25, 300, 200, 12, 0),
+      MyOptions = myOptions,
+      MyHelp = myHelp,
+      MyActivePlugins = myActivePlugins
+  {
+    /*
+      The purpose of this dialog is to collect the execution settings for verification.
+      It doesn't do anything further.
+    */
+    chkDebugCurr.Enable(false);
+    txtDebug.SetVisible(false);
+  }
+
+  virtual bool CanClose()
+  {
+
+    return DialogClass::CanClose();
+  }
+
+  virtual void ChildEvent(const EventClass &event) {
+    DialogClass::ChildEvent(event);
+
+    // What to do if the user click the library button
+    if(chkLibrary.Matches(event)){
+      if(chkLibrary.GetValue() == true)
+        (new LibraryDialog(this, MyOptions)).Execute();
+    }
+    else if(chkDebug.Matches(event)){
+      if(chkDebug.GetValue() == 1){
+        chkDebugCurr.Enable(true);
+        txtDebug.SetVisible(true);
+      }
+      else {
+        chkDebugCurr.Enable(false);
+        chkDebugCurr.SetValue(0);
+        txtDebug.SetVisible(false);
+      }
+    }
+    else if(btnHelp.Matches(event)){
+      MyHelp.ShowHelp(1003);
+    }
+
+    // What to do is the user selects a database type
+    else if(radDatabase.Matches(event)) {
+      if(radDatabase.GetValue() == 1)
+        (new SQLDialog(this, MyOptions, MyHelp)).Execute();
+
+      else if (radDatabase.GetValue() == 2)
+        (new OdbcDialog(this, MyOptions, MyHelp)).Execute();
+    }
+  }
+}

@@ -1,0 +1,56 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2//EN">
+<html>
+<head>
+<meta name="GENERATOR" content="Solutionsoft HelpBreeze HTML Help Edition">
+<title>Mounting Options</title>
+
+<link rel="stylesheet" type="text/css" href="htmlhelp.css"> 
+<script language="javascript" src="master.js">
+</script>
+
+</head>
+
+<body>
+<h1 style="MARGIN: 0in 0in 6pt"><u><font color="#1f497d" size="6" 
+face="Times New Roman">Mounting Options</font></u></h1>
+<p style="MARGIN: 0in 0in 6pt" class="MsoNormal"><font size="2" face="Arial">The two 
+check boxes on this tab <i style="mso-bidi-font-style: normal">only </i>apply if 
+you have checked the option to “Mount Zip Archives” (on the Main Settings 
+Page).<span style="mso-spacerun: yes">&nbsp; </span>It should be noted that the 
+</font><a 
+href="http://www.e-crime.on.ca/software/C4P3/download/presentation/Recommended_Procedures_for_C4P.pdf"><font 
+color="#800080" size="2" face="Arial">C4P Recommended Practices</font></a><font size="2" 
+face="Arial"> does not recommend using the C4P EnScript to mount anything.<span 
+style="mso-spacerun: yes">&nbsp; </span>Rather, the “GSI File Mounter” should be 
+utilized prior to running the C4P EnScript.</font></p>
+<p style="MARGIN: 0in 0in 6pt" class="MsoNormal"><o:p><font size="2" 
+face="Arial"></font></O:P></p>
+<h3 style="MARGIN: 0in 0in 0pt"><font color="#c00000" size="2" face="Cambria">Mount 
+‘Unknown’ Zip Volume Types</font></h3>
+<p style="MARGIN: 0in 0in 6pt" class="MsoNormal"><font size="2" face="Arial">The ZIP 
+file header contains a byte value which is used to indicate what <i 
+style="mso-bidi-font-style: normal">type</i> of zip file the item is.<span 
+style="mso-spacerun: yes">&nbsp; </span>While there are 256 possible values for 
+that byte, the C4P EnScript has only been programmed to account for the most 
+common ones. </font></p>
+<p style="MARGIN: 0in 0in 6pt" class="MsoNormal"><font size="2" 
+face="Arial">Attempting to mount a zip file which is of a type that has not been 
+accounted for specifically could result in the EnScript failing, or EnCase 
+crashing.</font></p>
+<p style="MARGIN: 0in 0in 6pt" class="MsoNormal"><font size="2" face="Arial">This 
+option should only be checked when you know there are files that should be 
+mounted, which aren’t.</font></p>
+<p style="MARGIN: 0in 0in 6pt" class="MsoNormal"><o:p><font size="2" 
+face="Arial"></font></O:P></p>
+<h3 style="MARGIN: 0in 0in 0pt"><font color="#c00000" size="2" face="Cambria">Copy 
+Protected Zip Volumes</font></h3>
+<p style="MARGIN: 0in 0in 6pt" class="MsoNormal"><font size="2" 
+face="Arial">Attempting to mount a password protected zip volume within EnCase 
+will cause either the EnScript to fail, or EnCase to crash.<span 
+style="mso-spacerun: yes">&nbsp; </span>If this option is checked, and the C4P 
+EnScript encounters a protected zip volume, then it will be extracted to the 
+“Protected Zips” folder in the export location.<span 
+style="mso-spacerun: yes">&nbsp; </span>It will be up to you to manually crack 
+this file and then analyse the contents.</font></p>
+</body>
+</html>

@@ -1,0 +1,109 @@
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+class ASF_Stream_Bitrate_Properties_Object;
+
+class BitrateRecord{
+  int   Flags1;
+  int   Flags2;
+  int   StreamNumber;
+  int   Reserved;
+  long  AverageBitrate;
+
+  ObserverInterface _observer;
+
+  BitrateRecord(EntryFileClass ef, ObserverInterface theObserver){
+    _observer = theObserver;
+    Flags1 = ef.ReadBinaryInt(1, false);
+    Flags2 = ef.ReadBinaryInt(1, false);
+    AverageBitrate = ef.ReadBinaryInt(4, false);
+
+    if(Flags1 & 0x1)
+      StreamNumber = StreamNumber + 1;
+    if(Flags1 & 0x2)
+      StreamNumber = StreamNumber + 2;
+    if(Flags1 & 0x4)
+      StreamNumber = StreamNumber + 4;
+    if(Flags1 & 0x8)
+      StreamNumber = StreamNumber + 8;
+    if(Flags1 & 0x10)
+      StreamNumber = StreamNumber + 16;
+    if(Flags1 & 0x20)
+      StreamNumber = StreamNumber + 32;
+    if(Flags1 & 0x40)
+      StreamNumber = StreamNumber + 64;
+
+    if(Flags1 & 0x80)
+      Reserved = Reserved  + 1;
+    if(Flags2 & 0x1)
+      Reserved = Reserved  + 2;
+    if(Flags2 & 0x2)
+      Reserved = Reserved  + 4;
+    if(Flags2 & 0x4)
+      Reserved = Reserved  + 8;
+    if(Flags2 & 0x8)
+      Reserved = Reserved  + 16;
+    if(Flags2 & 0x10)
+      Reserved = Reserved  + 32;
+    if(Flags2 & 0x20)
+      Reserved = Reserved  + 64;
+    if(Flags2 & 0x40)
+      Reserved = Reserved  + 128;
+    if(Flags2 & 0x80)
+      Reserved = Reserved  + 256;
+  }
+
+}
+
+typedef BitrateRecord[] BitrateRecords;
+
+class ASF_Stream_Bitrate_Properties_Object{
+
+  ulong  ObjectId1;
+  ulong  ObjectId2;
+  long   ObjectSize;
+  long   BitrateRecordsCount;
+  BitrateRecords bitrateRecords;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  ASF_Stream_Bitrate_Properties_Object(const String &thePluginName, ObserverInterface theObserver){
+    _pluginName = thePluginName;
+    _observer = theObserver;
+    bitrateRecords = new BitrateRecords();
+  }
+
+  void Read(EntryFileClass ef, const long &offset){
+    ef.Seek(offset);
+
+    ObjectId1 = ef.ReadBinaryInt(8, true);
+    ObjectId2 = ef.ReadBinaryInt(8, true);
+    ObjectSize = ef.ReadBinaryInt(8, false);
+
+    if(offset + ObjectSize < ef.GetSize()){
+      BitrateRecordsCount = ef.ReadBinaryInt(2, false);
+
+      _observer.WriteDebug(_pluginName, "    ASF_Stream_Bitrate_Properties_Object", false);
+      _observer.WriteDebug(_pluginName, "    ====================================", false);
+      _observer.WriteDebug(_pluginName, "      Offset: " + offset, false);
+      _observer.WriteDebug(_pluginName, "      Object Size: " + ObjectSize, false);
+      _observer.WriteDebug(_pluginName, "      Records Count: " + BitrateRecordsCount, false);
+
+      for(int i; i < BitrateRecordsCount; i++){
+        BitrateRecord br(ef, _observer);
+        bitrateRecords.Add(br);
+
+        _observer.WriteDebug(_pluginName, "      Record (" + i + ")", false);
+        _observer.WriteDebug(_pluginName, "        Stream Number: " + br.StreamNumber, false);
+        _observer.WriteDebug(_pluginName, "        Average Bitrate: " + br.AverageBitrate, false);
+      }
+
+      _observer.WriteDebug(_pluginName, "  ", false);
+    }
+    else {
+      _observer.WriteDebug(_pluginName, "Not enough data to read the contents of this object.", false);
+    }
+
+    ef.Seek(offset + ObjectSize);
+  }
+}

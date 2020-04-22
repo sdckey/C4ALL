@@ -1,0 +1,163 @@
+typelib DB "ADODB.Connection"
+
+include "..\\..\\Classes\\OptionsClass"
+include "ConsoleController"
+
+class DataController {
+
+
+  DB::Connection    Conn;
+  DB::Recordset     RS;
+  OptionsClass      MyOptions;
+  String            ConnectionString;
+
+  DateClass         LastUsed;
+  DateClass         CurrentTime;
+
+  ConsoleController MyConsole;
+
+
+  DataController(OptionsClass myOptions, ConsoleController myConsole):
+    MyOptions = myOptions,
+    MyConsole = myConsole
+  {
+  }
+
+#ifdef VERSION_8
+  bool TestConnection()
+  {
+    bool isgood = true;
+
+
+    if(MyOptions.DbType == 1){
+      // SQL
+      ConnectionString = "Provider=SQLOLEDB;Data Source=" + MyOptions.ServerName + ";Database=" + MyOptions.DbName + ";" +
+                                      "UID=" + MyOptions.LoginName + ";PWD=" + MyOptions.Password + ";";
+    }
+    else if(MyOptions.DbType == 2){
+      // mySQL
+      if(MyOptions.ODBCstring == "")
+        ConnectionString = "Provider=MSDASQL;DRIVER={MySQL ODBC 3.51 Driver};SERVER=" + MyOptions.ServerName + ";DATABASE=" + MyOptions.DbName + ";" +
+                                      "UID=c4p_user;PASSWORD=password;OPTION=3;";
+      else
+        ConnectionString = MyOptions.ODBCstring;
+    }
+
+    if(ConnectionString == ""){
+      MyConsole.WriteFullLine("No Database Connection required.");
+    }
+    else {
+      MyConsole.WriteFullLine("Attempting to Establish Connction to Hash Database...");
+
+      DB::Connection con;
+      con.Create();
+      con.SetConnectionTimeout(60);
+
+      MyConsole.WriteFullLine("Connection String to use:  \"" + ConnectionString + "\"");
+      con.Open(ConnectionString);
+
+      // Now test to see if the connection is alive
+      if (con.State() == DB::adStateOpen)
+      {
+        MyConsole.WriteFullLine("Connection successful.");
+      }
+      else
+      {
+        SystemClass::Message(SystemClass::MBOK, "Error!", SystemClass::LastError());
+        MyConsole.WriteFullLine(SystemClass::LastError());
+        isgood = false;
+      }
+
+      con.Close();
+    }
+
+    return isgood;
+  }
+#endif
+
+  void SetConnection(){
+    if(MyOptions.DbType == 0){
+      // None
+      ConnectionString = "";
+    }
+    else if(MyOptions.DbType == 1){
+      // SQL
+      ConnectionString = "Provider=SQLOLEDB;Data Source=" + MyOptions.ServerName + ";Database=" + MyOptions.DbName + ";" +
+                                      "UID=" + MyOptions.LoginName + ";PWD=" + MyOptions.Password + ";";
+    }
+    else if(MyOptions.DbType == 2){
+      // mySQL
+      if(MyOptions.ODBCstring == "")
+        ConnectionString = "Provider=MSDASQL;DRIVER={MySQL ODBC 3.51 Driver};SERVER=" + MyOptions.ServerName + ";DATABASE=" + MyOptions.DbName + ";" +
+                                      "UID=c4p_user;PASSWORD=password;OPTION=3;";
+      else
+        ConnectionString = MyOptions.ODBCstring;
+    }
+
+    if(ConnectionString == ""){
+      MyConsole.WriteFullLine("No Database Connection required.");
+    }
+    else {
+      MyConsole.WriteFullLine("Attempting to Establish Connction to Hash Database...");
+      Conn.Create();
+      Conn.SetConnectionTimeout(60);
+      RS.Create();
+      MyConsole.WriteFullLine("Connection String to use:  \"" + ConnectionString + "\"");
+      Conn.Open(ConnectionString);
+
+      Conn.Close();
+
+      MyConsole.WriteFullLine("Connection successful.");
+      LastUsed.Now();
+    }
+  }
+
+  void CheckTimeout(){
+    // Check the connection object's state and re-open where necessary
+    //  adStateClosed == 0
+    //  adStateOpen == 1
+    //  adStateConnecting == 2
+    //  adStateExecuting == 4
+    //  adStateFetching == 8
+    if(Conn.State() == 0 ){
+      Conn.Open(ConnectionString);
+    }
+    else {
+      // Otherwise force a re-open after 10 minutes without any database calls
+      CurrentTime.Now();
+      if(CurrentTime.GetUnix() - LastUsed.GetUnix() >= 600){
+        Conn.Close();
+        Conn.Open(ConnectionString);
+      }
+    }
+
+  }
+
+
+  String GetVictim(const String &hash){
+    String victimPath;
+    if(MyOptions.DbType != 0){
+      CheckTimeout();
+      RS.Open("Select path FROM victim_table WHERE md5 = '" + hash + "'", Conn, DB::adOpenForwardOnly, DB::adLockReadOnly);
+      if(!RS.EOF()) victimPath = RS.Fields().Item("path").Value();
+      RS.Close();
+      LastUsed.Now();
+    }
+    return victimPath;
+  }
+
+
+  int GetCategory(const String &hash){
+    int cat;
+
+    if(MyOptions.DbType != 0) {
+      CheckTimeout();
+      RS.Open("Select category FROM md5_table WHERE md5 = '" + hash + "'", Conn, DB::adOpenForwardOnly, DB::adLockReadOnly);
+      if(!RS.EOF()) cat = RS.Fields().Item("category").Value();
+      RS.Close();
+      LastUsed.Now();
+    }
+
+    return cat;
+  }
+}

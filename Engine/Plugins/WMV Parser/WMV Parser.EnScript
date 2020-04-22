@@ -1,0 +1,92 @@
+include "..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+include "ASF_Header_Object\\ASF_Header_Object"
+include "ASF_Data_Object\\ASF_Data_Object"
+include "ASF_Index_Object\\ASF_Generic_Index_Object"
+
+class WmvClass{
+
+  ASF_Header_Object         HeaderObject;
+  ASF_Data_Object           DataObject;
+  ASF_Generic_Index_Object  IndexObject;
+
+  long                      MinimumDataPackets;
+  bool                      ExtractAudioFiles;
+
+  String                    _pluginName;
+  ObserverInterface         _observer;
+
+  WmvClass(const String &thePluginName, ObserverInterface theObserver){
+    _pluginName = thePluginName;
+    _observer = theObserver;
+
+    HeaderObject = new ASF_Header_Object(_pluginName, _observer);
+    DataObject = new ASF_Data_Object(_pluginName, _observer);
+    IndexObject = new ASF_Generic_Index_Object(_pluginName, _observer);
+    MinimumDataPackets = 4;
+    ExtractAudioFiles = false;
+  }
+
+
+  long Validate(EntryClass e, long offset){
+    _observer.WriteDebug(_pluginName, "WMV File Format Parser", false);
+    _observer.WriteDebug(_pluginName, "======================", false);
+    _observer.WriteDebug(_pluginName, "  Called on Entry: " + e.FullPath(), false);
+    _observer.WriteDebug(_pluginName, "  At Offset: " + offset, false);
+    _observer.WriteDebug(_pluginName, "", false);
+
+    long wmvFileSize;
+
+    EntryFileClass ef();
+
+    #ifdef VERSION_6
+      ef.Open(e, FileClass::SLACK);
+    #else
+      ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
+    #endif
+
+    if(ef){
+      ef.SetCodePage(CodePageClass::ANSI);
+      ef.Seek(offset);
+
+
+      // 1. Read the header and all that it contains
+      HeaderObject.Read(ef, offset);
+
+      // 2. If the Header was successful, then move on to the Data
+      if(HeaderObject.HeaderFieldsAreValid && HeaderObject.HeaderObjectsAreValid){
+
+        // 2a - deal with audio-only files
+        if(HeaderObject.StreamPropertiesObject.HasVideo || ExtractAudioFiles){
+          // 3. Read the data and all that it contains
+          ulong objId1 = ef.ReadBinaryInt(8, true);
+          ef.Skip(-8);
+          if(objId1 == 0x3626B2758E66CF11){
+            DataObject.Read(ef, ef.GetPos(), HeaderObject.FilePropertiesObject.MinimumDataPacketSize, MinimumDataPackets);
+
+            if(DataObject.keepWorking){
+              IndexObject.Read(ef, ef.GetPos());
+
+              wmvFileSize = ef.GetPos() - offset;
+              _observer.WriteDebug(_pluginName, "WMV Validation was successful.  File Size determined as: " + wmvFileSize, false);
+            }
+            else {
+              _observer.WriteDebug(_pluginName, "WMV Validation failed in DataObject", false);
+            }
+          }
+          else
+            _observer.WriteDebug(_pluginName, "Expected ASF_Data_Object value, but failed", false);
+        }
+        else
+          _observer.WriteDebug(_pluginName, "File contained Audio only, and script is not targeting WMA files", false);
+      }
+      else
+        _observer.WriteDebug(_pluginName, "Invalid Header.  Failed Validation", false);
+    }
+    else
+      _observer.WriteDebug(_pluginName, "Could not open entry: " + e.FullPath(), false);
+
+
+    return wmvFileSize;
+  }
+}

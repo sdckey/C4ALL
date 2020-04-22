@@ -1,0 +1,40 @@
+class RiffBaseClass{
+
+  String  fileName;
+  long    fileSize;
+  String  fileType;
+
+  bool    _isValid;
+
+  RiffBaseClass(){
+
+  }
+
+  virtual bool IsValid(){
+    return _isValid;
+  }
+
+   void Read(EntryFileClass ef, const long &offset, const String &padding){
+    String s = padding;
+    s = s + " ";
+
+    _isValid = true;
+    ef.Seek(offset);
+    ef.SetCodePage(CodePageClass::ANSI);
+
+    // read in the fileName (ie: RIFF, LIST, etc)
+    long pos = ef.GetPos();
+    ef.ReadString(fileName, 4);
+    ef.Seek(pos + 4);
+
+    // read in the fileSize
+    fileSize = ef.ReadBinaryInt(4, false);
+
+    if(fileSize > 0){
+      // read in the fileType
+      pos = ef.GetPos();
+      ef.ReadString(fileType, 4);
+      ef.Seek(pos + 4);
+    }
+  }
+}

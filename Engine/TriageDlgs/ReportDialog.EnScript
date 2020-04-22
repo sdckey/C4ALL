@@ -1,0 +1,39 @@
+include "..\\Classes\\OptionsClass"
+include "..\\Core Files\\Controllers\\HelpController"
+
+class ReportDialog: DialogClass {
+
+  HelpController    MyHelp;
+  StaticTextClass   txtTitle;
+  StringEditClass   txtCaseName,
+                    txtExaminer,
+                    txtDate,
+                    txtTime,
+                    txtComments;
+
+  ButtonClass       btnHelp;
+  OptionsClass      MyOptions;
+
+  ReportDialog(DialogClass parent, OptionsClass myOptions, HelpController myHelp) :
+    DialogClass   (parent, "Case Report Values:"),
+      txtTitle    (this, "(Used to Uniquely Identify this Case):",  70,  20,  70, 12, 0),
+      txtCaseName (this, "Case Name:",                              10,  30, 280, 12,
+                   WindowClass::AUTOHSCROLL, myOptions.CaseName, 256, WindowClass::REQUIRED),
+      txtExaminer (this, "Forensic Examiner:",                      10,  60, 280, 12,
+                   WindowClass::AUTOHSCROLL, myOptions.ForensicAnalyst, 256, WindowClass::REQUIRED),
+      txtComments (this, "Comments:",                               10,  90, 280, 12,
+                   WindowClass::AUTOHSCROLL, myOptions.Comments, 256, WindowClass::REQUIRED),
+    btnHelp      (this, "?",                                       290,  10,  20, 12, 0),
+      MyOptions = myOptions,
+      MyHelp = myHelp
+  {
+  }
+
+ virtual void ChildEvent(const EventClass &event) {
+    DialogClass::ChildEvent(event);
+
+    if(btnHelp.Matches(event)){
+      MyHelp.ShowHelp(1004);
+    }
+  }
+}

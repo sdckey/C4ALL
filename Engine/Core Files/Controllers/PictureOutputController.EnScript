@@ -1,0 +1,417 @@
+include "OutputController"
+include "..\\Models\\PictureCarveClass"
+
+class PictureOutputController: OutputController {
+
+  PictureOutputController(OptionsClass myOptions, DataController myData, ConsoleController myConsole):
+    MyOptions = myOptions,
+    MyData = myData,
+    MyConsole = myConsole
+  {
+    ReportIndex     = new LocalFileClass();
+    CaseReport      = new LocalFileClass();
+    CurrentReport   = new LocalFileClass();
+    DebugReport     = new LocalFileClass();
+    VictimReport    = new LocalFileClass();
+    ZipReport       = new LocalFileClass();
+    MyHash          = new HashController();
+    //MyConsole       = new ConsoleController(MyOptions);
+    DebugReportId   = 1;
+    DebugReportSize = 0;
+
+  }
+
+  virtual String GetIndexPath(){
+    String val = MyReportPath + "\\C4P Index.xml";
+    return val;
+  }
+
+  virtual void OpenIndexFile(bool append){
+    String xmlPath = GetIndexPath();
+    if (!ReportIndex.IsOpen()){
+      if(append){
+        if(!ReportIndex.Open(xmlPath, FileClass::APPEND)){
+          MyConsole.WriteFullLine("Could not open: " + xmlPath);
+          Message("Critical Failure!", "C4P Index File could not be opened!!!");
+          SystemClass::Exit();
+        }
+      } else {
+        if(!ReportIndex.Open(xmlPath, FileClass::WRITETEXTCRLF)){
+          MyConsole.WriteFullLine("Could not open: " + xmlPath);
+          Message("Critical Failure!", "C4P Index File could not be opened!!!");
+          SystemClass::Exit();
+        }
+      }
+
+    }
+    ReportIndex.SetCodePage(CodePageClass::UNICODE);
+  }
+
+  virtual void Initialize(bool trustMe, ActivePlugins plugins){
+
+    // Create Default Bookmark Structure
+#ifdef VERSION_6
+    BookmarkRoot = new BookmarkFolderClass(null, "");
+    BookmarkRoot = new BookmarkFolderClass(BookmarkRoot, "C4P Results - " + MyOptions.StartDate + " " + MyOptions.StartTime);
+    BookmarkRoot.AddNote("EnScript Compile Date: " + MyOptions.CompileDate, 0, 0, 0);
+
+    // And then, if desired, add pre-cat folders
+    if(MyOptions.MakeBookmarks)
+      BookmarkRoot.SetComment("Results categorized from Hash Database");
+
+#else
+    //BookmarkRoot = new BookmarkClass(MyOptions.Case.BookmarkRoot(), "");
+    BookmarkRoot = new BookmarkClass(MyOptions.Case.BookmarkRoot(), "C4P Results - " + MyOptions.StartDate + " " + MyOptions.StartTime, NodeClass::FOLDER);
+
+    // And then, if desired, add pre-cat folders
+    if(MyOptions.MakeBookmarks)
+      BookmarkRoot.SetComment("Results categorized from Hash Database");
+
+    BookmarkTextClass note(BookmarkRoot, "Note", 0);
+    note.SetComment("EnScript Compile Date: " + MyOptions.CompileDate);
+#endif
+
+
+    // Case Root
+    MyReportPath = MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName;
+    if (!LocalMachine.PathExists(MyReportPath)){
+     if(!LocalMachine.CreateFolder(MyReportPath))
+       MyConsole.WriteFullLine("Could not create the Case Root! (" + MyReportPath  + ")");
+    }
+
+    // Write the script's Settings to a text file
+    SaveSettings(plugins);
+
+    // PASSWORD PROTECTED FILES
+    if(!LocalMachine.PathExists(MyReportPath + "\\Protected Files")){
+      if(!LocalMachine.CreateFolder(MyReportPath + "\\Protected Files"))
+        MyConsole.WriteFullLine("Could not create the Protected Files Folder! (" + MyReportPath + "\\Protected Files)");
+    }
+
+    MyOptions.ProtectedPath = MyReportPath + "\\Protected Files\\";
+
+    // Create base C4P folder
+    MyReportPath = MyReportPath + "\\C4P";
+    if (!LocalMachine.PathExists(MyReportPath)){
+      if(!LocalMachine.CreateFolder(MyReportPath))
+        MyConsole.WriteFullLine("Could not create the C4P folder! (" + MyReportPath + ")");
+    }
+
+    // CASE REPORT
+    StartCaseReport(trustMe);
+
+    // DEBUG Report
+    if(MyOptions.Debug){
+      String path = MyReportPath + "\\Debug";
+      if (!LocalMachine.PathExists(path)){
+       if(!LocalMachine.CreateFolder(path))
+         MyConsole.WriteFullLine("Could not create the Index Report! (" + path + ")");
+      }
+
+      if(MyOptions.DebugCurrentOnly){
+        if(!CurrentReport.Open(path + "\\Current Report.txt", FileClass::WRITE))
+          MyConsole.WriteFullLine("Could not open: " + path + "\\Current Report.txt");
+        CurrentReport.SetCodePage(CodePageClass::ANSI);
+        CurrentReport.Close();
+      }
+      else {
+        if(!MyOptions.DebugCurrentOnly){
+          path = path + "\\Debug Report_" + DebugReportId + ".txt";
+          if(!DebugReport.Open(path, FileClass::WRITE))
+            MyConsole.WriteFullLine("Could not open: " + path);
+          DebugReport.SetCodePage(CodePageClass::ANSI);
+        }
+      }
+    }
+
+    // Excluded Bookmarks
+    if(MyOptions.ExcludePreCatVal > 0)
+    #ifdef VERSION_6
+      ExcludeRoot = new BookmarkFolderClass(BookmarkRoot, "Excluded by Pre-Cat");
+    #else
+      ExcludeRoot = new BookmarkClass(BookmarkRoot, "Excluded by Pre-Cat", NodeClass::FOLDER);
+    #endif
+
+    // Failed Bookmarks
+  #ifdef VERSION_6
+    FailedRoot = new BookmarkFolderClass(BookmarkRoot, "Failed to Extract");
+  #else
+    FailedRoot = new BookmarkClass(BookmarkRoot, "Failed to Extract", NodeClass::FOLDER);
+  #endif
+
+    // First Export Folder
+    if(!MyOptions.ExportByHash)
+      MakeNewFolder();
+
+
+    // C4P Index.xml
+    StartIndexFile();
+
+    // Victim Report.xml
+    String path = MyReportPath + "\\Victim Report.xml";
+    if(VictimReport.Open(path, FileClass::WRITETEXTCRLF)){
+      VictimReport.WriteLine("<?xml version=\"1.0\" encoding=\"utf-16\"?>");
+      VictimReport.WriteLine("  <VictimIndex>\r\n");
+      VictimReport.Close();
+    } else
+      MyConsole.WriteFullLine("Could not open: " + path);
+  }
+
+  void CarveFile(PictureCarveClass pc, const String &path){
+    if(pc){
+
+      // 1. an EntryFile class if required
+      EntryFileClass ef();
+      if(!pc.MF){
+
+        #ifdef VERSION_6
+          ef.Open(pc.Entry, FileClass::SLACK);
+        #else
+          ef.Open(pc.Entry, FileClass::SLACK | FileClass::NOINITIALIZE);
+        #endif
+
+        if(!ef)
+          MyConsole.WriteFullLine("Failed to open entry: " + path + pc.Entry.FullPath());
+      }
+
+      // 2. Get the file's MD5 hash
+      String hash;
+      String hash2;
+      if(pc.MF){
+        pc.MF.Seek(0);
+        hash = MyHash.GetMd5Hash(pc.MF, pc.FileLength);
+        if("jpg".Compare(pc.Extension, false) == 0) hash2 = MyHash.GetMd5Hash(pc.MF, pc.FileLength - 2);
+      }
+      else {
+        ef.Seek(pc.Offset);
+        hash = MyHash.GetMd5Hash(ef, pc.FileLength);
+        if("jpg".Compare(pc.Extension, false) == 0) {
+          ef.Seek(pc.Offset);
+          hash2 = MyHash.GetMd5Hash(ef, pc.FileLength-2);
+        }
+      }
+
+      // 3. Get the pre-category
+      int category = MyData.GetCategory(hash);
+
+      if(MyOptions.ExcludePreCatVal > 0)
+      {
+        if(MyOptions.ExcludePreCatVal != category){
+          if(category == 1)
+            Cat1++;
+          else if(category == 2)
+            Cat2++;
+          else if(category == 3)
+            Cat3++;
+          else if(category == 4)
+            Cat4++;
+          else if(category == 5)
+            Cat5++;
+          else if(category == 6)
+            Cat6++;
+          else if(category == 7)
+            Cat7++;
+          else if(category == 8)
+            Cat8++;
+          else if(category == 9)
+            Cat9++;
+          else if(category == 10)
+            Cat10++;
+          else if(category == 11)
+            Cat11++;
+
+        } else
+          CatX++;
+      }
+
+
+      if(category == 0 && "jpg".Compare(pc.Extension, false) == 0) category = MyData.GetCategory(hash2);
+
+
+      // 4. Decide how to treat this hit:
+      //    - do we ignore it because it is a user-selected "ignore" pre-category?
+      //    - or do we process it
+      if(MyOptions.ExcludePreCatVal == category && category > 0){
+        if(MyOptions.Debug)
+          WriteDebug("OutputController", "File validated, but excluded by user (category " + category + ")");
+
+        if(MyOptions.BookmarkExcludedPreCat)
+#ifdef VERSION_6
+          ExcludeRoot.AddBookmark(pc.Entry, pc.Offset, 10, "Excluded Pre-Cat Hit (" + category + ")", BookmarkClass::SHOWPICTURE, BookmarkClass::PICTURE);
+#else
+          AddPictureBookmark(ExcludeRoot, pc.Entry.Name(), "Excluded Pre-Cat Hit (" + category + ")", pc.Entry, pc.Offset, 10);
+#endif
+      }
+      else {
+        FileCount++;
+        LocalFileCount++;
+        ExportToFolderCount++;
+        FolderSize = FolderSize + pc.FileLength + 2047;
+
+
+        // Decide how to identify this file once it is extracted
+        String fileName;
+        String outPath;
+        String pathVal;
+
+        if(MyOptions.ExportByHash){
+          // when filing by hash, we need to verify each sub-folder is present as we build the path
+          fileName = hash + "." + pc.Extension;
+
+          outPath = MyReportPath + "\\";
+
+          String hashPath;
+
+          hashPath = hash.SubString(0,1);
+          if(!LocalMachine.PathExists(outPath + hashPath))
+            LocalMachine.CreateFolder(outPath + hashPath);
+
+          hashPath = hashPath + "\\" + hash.SubString(1,1);
+          if(!LocalMachine.PathExists(outPath + hashPath))
+            LocalMachine.CreateFolder(outPath + hashPath);
+
+          outPath = outPath + hashPath + "\\";
+          pathVal = hashPath;
+        }
+        else {
+          fileName = PadNumber(FileCount) + "." + pc.Extension;
+          outPath = MyReportPath + "\\" +
+                              FolderName + "\\" + SubFolderName + "\\";
+          pathVal = FolderName + "\\" + SubFolderName;
+
+        }
+
+        if(outPath.GetLength() > 255){
+          Message("Script Failure", "The path of the file to be exported is TOO long.  Windows won't support this.\n\n" +
+                              "You need to change the length of your Case Name, as it is included in the root folder and every CD/DVD folder " +
+                              "or change the location of your Root Path.  The combined length of these folder names exceeds 255 characters.\n\n" +
+                              "(" + outPath + ")");
+          SystemClass::Exit();
+        }
+
+        // There are two types of files to carve out- Base 64 will be a Memory FileClass
+        bool extractSuccess = false;
+        if(pc.MF){
+
+          // 1. Copy out the Decoded data
+          extractSuccess = Extract(pc.MF, pc, outPath + fileName);
+        }
+
+        else {
+            // 2. Copy out the data
+            extractSuccess = Extract(ef, pc, outPath + fileName);
+        }
+
+
+        // Sometimes the export process will fail.  There are various reasons why, but if it DID fail, we don't want to write anything to the output directory
+        // ...we also need to reverse the counters
+        if(!extractSuccess){
+          FileCount--;
+          LocalFileCount--;
+          ExportToFolderCount--;
+          FolderSize = FolderSize - (pc.FileLength + 2047);
+          FailedCount++;
+        }
+        else {
+
+          // 4. Write to the Picture Library
+          CopyToLibrary(outPath + fileName, hash, pc.Extension);
+
+          // 6. Get the victim match info
+          String victimPath = MyData.GetVictim(hash);
+          AddVictimEntry(victimPath, hash);
+
+          // 7. Write in the XML
+          AddXmlEntry(pc, hash, pc.Entry.HashValue(), category, path, pathVal, fileName);
+
+          // 8.  Bookmark the picture
+          AddBookmark(pc, fileName);
+
+          // 9.  Update statusbar
+          MyOptions.SetStatusMessage("Found " + FileCount + " files");
+
+          // 10. Increment the folders if necessary
+          if(!MyOptions.ExportByHash){
+            if(FolderSize >= 4500000000)
+              MakeNewFolder();
+            else if(ExportToFolderCount >= 5000)
+              MakeNewSubFolder();
+          }
+        }
+      }
+    }
+  }
+
+
+
+  virtual void AddXmlEntry(PictureCarveClass pc, const String &hash, const String &encaseHash, int category, const String &path, const String &pathVal, const String &fileName){
+
+    String lineValue;
+    String accessed, created, written, modified, deleted;
+
+    if(pc.Offset == 0){
+      created = ReturnDateString(pc.Entry.Created());
+      accessed = ReturnDateString(pc.Entry.Accessed());
+      written = ReturnDateString(pc.Entry.Written());
+      modified = ReturnDateString(pc.Entry.Modified());
+      deleted = ReturnDateString(pc.Entry.Deleted());
+    }
+
+    XMLCharacterController xml();
+#ifdef VERSION_6
+    String fullPath = xml.ConvertChar(path + pc.Entry.FullPath(), "*");
+#else
+    String fullPath = xml.ConvertChar(path + pc.Entry.TruePath(), "*");
+#endif
+    //String metaData = xml.ConvertChar(pc.MetaData, "");
+    //metaData = "";
+
+    lineValue = "  <Image>\r\n" +
+                "    <path><![CDATA["      + pathVal                                + "\\]]></path>\r\n" +
+                "    <picture>"            + fileName                                    + "</picture>\r\n" +
+                "    <category>"           + category                                    + "</category>\r\n" +
+                "    <id>"                 + FileCount                                   + "</id>\r\n" +
+                "    <fileoffset>"         + pc.Offset                                   + "</fileoffset>\r\n"  +
+                "    <fullpath><![CDATA["  + fullPath                                 + "]]></fullpath>\r\n" +
+                "    <created>"            + created                                     + "</created>\r\n" +
+                "    <accessed>"           + accessed                                    + "</accessed>\r\n" +
+                "    <written>"            + written                                     + "</written>\r\n" +
+                "    <deleted>"            + deleted                                     + "</deleted>\r\n" +
+                "    <hash>"               + hash                                        + "</hash>\r\n" +
+                "    <encaseHash>"         + encaseHash                                  + "</encaseHash>\r\n" +
+                "    <myDescription>"      + pc.Entry.Description()                      + "</myDescription>\r\n" +
+                "    <physicalLocation>"   + pc.Entry.PhysicalLocation()                 + "</physicalLocation>\r\n" +
+                "    <myUnique>"           + "0"                                         + "</myUnique>\r\n" +
+                "    <tagged>"             + "0"                                         + "</tagged>\r\n" +
+                "    <subCat>"             + " "                                         + "</subCat>\r\n" +
+                "    <notes>"              + " "                                         + "</notes>\r\n" +
+                "    <fileSize>"           + pc.FileLength                               + "</fileSize>\r\n" +
+                "    <bitDepth>"           + pc.BitDepth                                 + "</bitDepth>\r\n" +
+                "    <aspectRatio>"        + pc.AspectRatio                              + "</aspectRatio>\r\n" +
+              #ifndef VERSION_6
+                "    <monikers>"           + pc.Monikers                                 + "</monikers>\r\n" +
+              #endif
+                "  </Image>\r\n";
+
+
+    // if necessary, reopen this file
+    OpenIndexFile(true);
+
+    // add the new record
+    ReportIndex.WriteLine(lineValue);
+    ReportIndex.Close();
+
+  }
+
+
+  virtual void CloseVictimFile(){
+    String path = MyReportPath + "\\Victim Report.xml";
+    if (!VictimReport.IsOpen()){
+      if(!VictimReport.Open(path, FileClass::APPEND))
+        MyConsole.WriteFullLine("Could not open: " + path);
+    }
+
+    VictimReport.WriteLine("  </VictimIndex>");
+    VictimReport.Close();
+  }
+}

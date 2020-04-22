@@ -1,0 +1,397 @@
+include "..\\Core Files\\Controllers\\SearchController"
+include "HitClass"
+
+typedef HitClass[] HitClassArray;
+
+
+class SqliteWorker: ObserverInterface {
+
+  MpgPlugin                 mpg;
+
+  LocalFileClass            dbFile;
+  SQLiteClass               con;
+
+  SQLiteClass::CommandClass entryCmd;
+  SQLiteClass::CommandClass hitCmd;
+  SQLiteClass::CommandClass updateCmd;
+
+  int                       entryId;
+
+  int                       entryInserts;
+  int                       hitInserts;
+  int                       hitSkips;
+  int                       insertLimit;
+  int                       updateCount;
+
+  String                    entryInsertCommand;
+  String                    hitInsertCommand;
+
+  SqliteWorker(){
+
+    entryId = 1;
+    entryInserts = 0;
+    hitInserts = 0;
+    insertLimit = 10000;
+    updateCount = 0;
+
+    mpg = new MpgPlugin();
+    mpg.SetObserver(this);
+    mpg.SetHeaderIndex(-1);
+
+
+  }
+
+  ~SqliteWorker()
+  {
+    mpg = null;
+  }
+
+ // =====================================================================
+  // Interface methods for the Observer Pattern
+  virtual void WriteDebug(const String &source, const String &message, int type){
+    // type == 0:  movie
+    // type == 1:  picture
+    // type == 2:  text
+    //if(MyOptions.Debug){
+    //  if(type == 1)
+    //    MyPictureOutput.WriteDebug(source, message);
+    //  else if(type == 0)
+    //    MyMovieOutput.WriteDebug(source, message);
+    //}
+  }
+  virtual void RaiseMessage(const String &title, const String &message){
+    //Message(title, message);
+  }
+  virtual void SetRange(const String &msg, long size){
+    //MyOptions.StatusRange(msg, size);
+  }
+  virtual void SetStatusMessage(const String &msg){
+    //SystemClass::StatusMessage(msg);
+  }
+  virtual void AppendStatusRange(const String &msg, long size){
+    //MyOptions.AppendStatusRange(msg, size);
+  }
+  virtual void RestoreStatusMessage(){
+    //MyOptions.RestoreStatusMessage();
+  }
+  virtual void AppendStatusMessage(const String &val){
+    //MyOptions.AppendStatusMessage(val);
+  }
+
+  virtual void WriteFullLine(const String &val){
+    //MyConsole.WriteFullLine(val);
+  }
+
+  virtual void WritePartLine(const String &val){
+    //MyConsole.WritePartLine(val);
+  }
+
+  virtual void WriteEndLine(const String &val){
+    //MyConsole.WriteEndLine(val);
+  }
+
+  virtual void WriteLine(const String &val){
+    //MyConsole.WriteLine(val);
+  }
+  // =====================================================================
+
+
+  void Create(const String &path){
+    con = new SQLiteClass();
+    dbFile = new LocalFileClass();
+
+    // WRITE = new file
+    // APPEND = add to existing file.
+    // We will use APPEND.  If the file should be new, it is the responsibility of the calling object to have deleted anything pre-existing.
+    if(dbFile.Open(path, FileClass::APPEND))
+    {
+      if(con.Open(dbFile, SQLiteClass::SQLITE_OPEN_READWRITE))
+      {
+        entryCmd = new SQLiteClass::CommandClass();
+        hitCmd = new SQLiteClass::CommandClass();
+
+        if(con.CreateCommand(entryCmd))
+        {
+          if(con.CreateCommand(hitCmd))
+          {
+            // Create the Entries reference table
+            bool b = entryCmd.ExecuteNonQuery("CREATE TABLE Entries " +
+                                                "(" +
+                                                      "entryId integer PRIMARY KEY AUTOINCREMENT, " +
+                                                      "fullPath text(500) NOT NULL, " +
+                                                      "sector integer NOT NULL " +
+                                                ");"
+                                              );
+            b = hitCmd.ExecuteNonQuery("CREATE INDEX ix_entries ON Entries (fullPath, sector);");
+
+
+            // The Hits table says that a unique row is the same entry, offset, and plugin type
+            b = hitCmd.ExecuteNonQuery("CREATE TABLE Hits (" +
+                                        "entryId integer NOT NULL, " +
+                                        "offset integer NOT NULL, " +
+                                        "pluginName text(100) NOT NULL, " +
+                                        "processed integer, " +
+                                        "PRIMARY KEY(entryId, offset, pluginName) " +
+                                        ");"
+                                     );
+            b = hitCmd.ExecuteNonQuery("CREATE INDEX ix_hits ON Hits (processed);");
+
+            // Now start the transactions
+            entryCmd.ExecuteNonQuery("Begin");
+            hitCmd.ExecuteNonQuery("Begin");
+          }
+        }
+        else
+        {
+          Console.WriteLine("Could not create command");  con = null;
+        }
+      }
+      else
+      {
+        Console.WriteLine("Couldn't open database connection");  con = null;
+      }
+    }
+    else
+    {
+      Console.WriteLine("Could not open test.sqlite");  con = null;
+    }
+  }
+
+  void Connect(const String &path)
+  {
+    con = new SQLiteClass();
+    dbFile = new LocalFileClass();  //
+
+    if(dbFile.Open(path, FileClass::APPEND))
+    {
+      if(con.Open(dbFile, SQLiteClass::SQLITE_OPEN_READWRITE))
+      {
+        entryCmd = null;
+        hitCmd = null;
+        updateCmd = new SQLiteClass::CommandClass();
+
+        if(con.CreateCommand(updateCmd))  //
+        {
+        }
+        else
+        {
+          Console.WriteLine("Could not create command");  con = null; return;
+        }
+
+        // Now start the transactions
+        //updateCmd.ExecuteNonQuery("Begin");
+
+      }
+      else
+      {
+        Console.WriteLine("Couldn't open database connection");  con = null;
+      }
+    }
+    else
+    {
+      Console.WriteLine("Could not open test.sqlite");  con = null;
+    }
+  }
+
+  // Called by ValidateWorker
+  void UpdateHit(HitClass h, int action){
+    if(updateCount > insertLimit)
+    {
+      //// Commit the previous
+      //updateCmd.ExecuteNonQuery("Commit");
+
+      //// Prepare for the next one
+      //updateCmd.ExecuteNonQuery("Begin");
+      updateCount = 0;
+    }
+
+
+    String s = "UPDATE Hits SET processed = " + action + " " +
+                 "WHERE entryId = " + h.EntryId + " AND " +
+                       "offset = " + h.Offset + " AND " +
+                       "pluginName = '" + h.PluginName + "';";
+
+    updateCmd.ExecuteNonQuery(s);
+    updateCount++;
+  }
+
+
+
+  void RegisterHits(EntryClass entry, SearchClass::HitArrayClass hits, SearchController search ){
+    if(entryInserts > insertLimit)
+    {
+      // Commit the previous
+      entryCmd.ExecuteNonQuery("Commit");
+
+      // Prepare for the next one
+      entryCmd.ExecuteNonQuery("Begin");
+      entryInserts = 0;
+    }
+
+
+    // Is this Entry already in the database? (from a previous run).  If so we don't want another Entrires record.
+    bool alreadyHaveThisEntry = false;
+    long tempId;
+
+    SQLiteClass::DataReaderClass dr = new SQLiteClass::DataReaderClass();
+    entryCmd.ExecuteQuery("SELECT EntryId FROM Entries WHERE fullPath = '" + entry.FullPath() + "' AND sector = " + entry.PhysicalSector() + ";", dr);
+    while(dr.Read()){
+      dr.Get(0, tempId);
+    }
+    dr.Close();
+
+    if(tempId > 0){
+      alreadyHaveThisEntry = true;
+      entryId = tempId;
+    }
+
+    if(!alreadyHaveThisEntry){
+      // Add the Entry record
+      entryCmd.ExecuteNonQuery("INSERT INTO Entries (fullPath, sector) " +
+                                       "VALUES ('" + entry.FullPath() + "', " +
+                                                entry.PhysicalSector() + ");");
+      // And now get the entryId
+      entryCmd.ExecuteQuery("SELECT MAX(entryId) FROM Entries;", dr);
+      while(dr.Read())
+      {
+        dr.Get(0, entryId);
+      }
+      dr.Close();
+
+      entryInserts++;
+    }
+
+    if(hitInserts > insertLimit)
+    {
+      // Commit the previous
+      hitCmd.ExecuteNonQuery("Commit");
+
+      // Prepare for the next one
+      hitCmd.ExecuteNonQuery("Begin");
+      hitInserts = 0;
+    }
+
+
+    long ignoreUntil = -1;
+    forall(SearchClass::HitClass h in hits){
+      if(h.Offset() > ignoreUntil)
+      {
+        String pName = search.GetPluginName(h);
+        if(pName == "C4M Plugin - MPG")
+        {
+          // Validate MPG
+          // identify the validation length of the mpg and set ignoreUntil = datalength;
+          long dataLength = mpg.Validate(entry, h.Offset() );
+
+          if(dataLength > 0)
+            String s = "blah";
+
+          ignoreUntil = h.Offset() + dataLength;
+        }
+
+        String s = "INSERT INTO Hits (entryId, offset, pluginName, processed) " +
+                                       "VALUES(" + entryId + ", " +
+                                               h.Offset() + ", " +
+                                               "'" + pName + "', " +
+                                               "0);";
+        hitCmd.ExecuteNonQuery(s);
+        hitInserts++;
+      }
+      else
+        hitSkips++;
+    }
+
+
+  }
+
+
+
+
+  HitClassArray GetHits(){
+    HitClassArray hits = new HitClassArray();
+
+    SQLiteClass::DataReaderClass dr = new SQLiteClass::DataReaderClass();
+    updateCmd.ExecuteQuery("SELECT Entries.entryId, Entries.fullPath, Entries.sector, Hits.offset, Hits.pluginName " +
+                     "FROM Hits INNER JOIN Entries ON Entries.entryId = Hits.entryId " +
+                     "WHERE processed = 0 " +
+                     "ORDER BY fullPath, sector, offset;", dr);
+    while(dr.Read())
+    {
+      variant v;
+
+      HitClass h = new HitClass();
+
+      // the path needs to be separated
+      String tempPath;
+      dr.Get(1, tempPath);
+
+       // Strip any leading "\" characters
+      if(tempPath.SubString(0,1) == "\\")
+        tempPath = tempPath.SubString(1,-1);
+
+      // Strip the first member of the fullPath - this is the case name.  We only care about the device name and path
+      int pos = tempPath.Find("\\");
+      tempPath = tempPath.SubString(pos+1,-1);
+
+      // Now isolate the Device Name and Path
+      pos = tempPath.Find("\\");
+      h.DeviceName = tempPath.SubString(0,pos);
+      tempPath = tempPath.SubString(pos+1,-1);
+
+      // Strip any leading "\" characters
+      if(tempPath.SubString(0,1) == "\\")
+        tempPath = tempPath.SubString(1,-1);
+
+      h.FullPath = tempPath;
+
+      dr.Get(0,h.EntryId);
+      //dr.Get(1,h.FullPath);  // built above
+      dr.Get(2,h.PhysicalSector);
+      dr.Get(3,h.Offset);
+      dr.Get(4,h.PluginName);
+
+      hits.Add(h);
+    }
+
+    return hits;
+  }
+
+
+  void Cleanup()
+  {
+    // This is a chance to deal with the final batch of Insert statements
+    if(entryInserts > 0)
+      entryCmd.ExecuteNonQuery("Commit");
+
+    if(hitInserts > 0)
+      hitCmd.ExecuteNonQuery("Commit");
+
+    //if(updateCount > 0)
+    //  updateCmd.ExecuteNonQuery("Commit");
+  }
+
+  void Close(){
+    if(con)
+    {
+      Cleanup();
+
+      if(updateCmd) updateCmd.Close();
+      if(hitCmd) hitCmd.Close();
+      if(entryCmd) entryCmd.Close();
+
+      if(con) con.Close();
+      if(dbFile) dbFile.Close();
+
+      updateCmd = null;
+      hitCmd = null;
+      entryCmd = null;
+
+      con = null;
+
+      dbFile = null;
+
+    }
+  }
+
+
+}

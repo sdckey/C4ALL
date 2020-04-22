@@ -1,0 +1,53 @@
+include "..\\Classes\\OptionsClass"
+include "..\\Core Files\\Controllers\\HelpController"
+
+class ExcludeDialog: DialogClass{
+
+  HelpController   MyHelp;
+  GroupBoxClass    grpJunk;
+  StaticTextClass  txtJunk;
+  RadioButtonClass radJunk;
+  CheckBoxClass    chkJunk;
+  GroupBoxClass    grpUnique;
+  StaticTextClass  txtUnique1;
+  StaticTextClass  txtUnique2;
+  StaticTextClass  txtUnique3;
+  CheckBoxClass    chkUnique;
+
+  OptionsClass     MyOptions;
+  ButtonClass      btnHelp;
+
+  ExcludeDialog(DialogClass parent, OptionsClass myOptions, HelpController myHelp):
+    DialogClass(parent, "Exclusionary Options:"),
+    grpJunk(this, "Pre-Categorization:", 12, 7, 274, 200, 0),
+    radJunk(this, "Ignore a Category:", 30, 20, 85, 10, 0, myOptions.ExcludePreCatVal, "None\tCategory 1\tCategory 2\tCategory 3\tCategory 4\tCategory 5\tCategory 6\tCategory 7\tCategory 8\tCategory 9"),
+    txtJunk(this, "One of the standard features in a C4P Hash Database is a 'Junk' category.\n\n" +
+                  "This category holds all MD5 hash values of pictures which are 'Known Not Notable'.\n\n" +
+                  "In order to reduce the overall size of your C4P Disclsoure Package (made by this script) " +
+                  "you can choose to NOT export any pre-categorization matches to your 'Junk' category.\n\n" +
+                  "To do this, simply select your 'Junk' category number at left.\n\n" +
+                  "NOTE: when you use this option, the end-user will NEVER know that these pictures " +
+                  "existed in their case...\n\n" +
+                  "This setting will be saved for future cases.", 120, 22, 150, 160, WindowClass::LEFT),
+    chkJunk(this, "Bookmark these pictures instead", 30, 185, 20, 18, 0, myOptions.BookmarkExcludedPreCat),
+    grpUnique(this, "Unique Pictures:", 12, 210, 274, 100, 0),
+    txtUnique1(this, "Another way to reduce the total size of the C4P Disclosure Package is to limit the amount of data physically stored in it.", 20, 220, 248, 17, WindowClass::LEFT),
+    txtUnique2(this, "Instead of storing each file by a sequential number, you can choose to \n" +
+                  "store the file by their Md5 Hash value.", 20, 240, 249, 17, WindowClass::LEFT),
+    txtUnique3(this, "All duplicate entries would still exist within the Index.xml file, there would just be one copy physically stored in the folders.", 20, 263, 249, 17, WindowClass::LEFT),
+    chkUnique(this, "Store Extracted Files by their Md5", 20, 290, 80, 10, 0, myOptions.ExportByHash),
+    btnHelp(this, "?", 290,  10, 20, 12, 0),
+    MyOptions = myOptions,
+    MyHelp = myHelp
+  {
+  }
+
+ virtual void ChildEvent(const EventClass &event) {
+    DialogClass::ChildEvent(event);
+
+    // What to do if the user click the library button
+    if(btnHelp.Matches(event)){
+      MyHelp.ShowHelp(1006);
+    }
+  }
+}

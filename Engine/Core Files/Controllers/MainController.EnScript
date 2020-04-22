@@ -1,0 +1,356 @@
+include "..\\..\\ActivePlugins"
+include "..\\..\\Classes\\OptionsClass"
+include "..\\Models\\ZipClass"
+include "AnalysisController"
+include "ConsoleController"
+include "DataController"
+include "OutputController"
+include "SearchController"
+
+class MainController {
+
+  ActivePlugins     MyPlugins;
+  ConsoleController MyConsole;
+  DataController    MyData;
+  SearchController  MySearch;
+  OptionsClass      MyOptions;
+  ZipClass          MyZip;
+
+  MovieOutputController    MyMovieOutput;
+  PictureOutputController  MyPictureOutput;
+  AnalysisController       MyAnalysisController;
+
+  MainController(ActivePlugins myPlugins, OptionsClass myOptions,
+                    PictureOutputController myPictureOutput,
+                    MovieOutputController myMovieOutput,
+                    ConsoleController myConsole,
+                    DataController myData):
+    MyPlugins = myPlugins,
+    MyOptions = myOptions,
+    MyMovieOutput = myMovieOutput,
+    MyPictureOutput = myPictureOutput,
+    MyConsole = myConsole,
+    MyData = myData
+  {
+    MySearch = new SearchController(MyPlugins, MyOptions, MyPictureOutput, MyMovieOutput, MyConsole);
+    //MyConsole= new ConsoleController(MyOptions);
+    MyZip = new ZipClass(MyOptions, MyPictureOutput, MyMovieOutput);
+    MyAnalysisController = new AnalysisController(MyOptions, MyPictureOutput, MyMovieOutput, MyConsole);
+  }
+
+#ifdef VERSION_6
+  void MountFile(EntryClass e, bool inMount, String path){
+    MyConsole.WritePartLine("Mounting.." + //MyOptions.BuiltPath +
+                              path + e.FullPath());
+    VolumeClass v;
+
+    bool persist = true;
+    //if(MyOptions.MakeBookmarks) persist = true;
+    v = e.MountVolume(persist);
+    if(v){
+      MyConsole.WriteEndLine("...mounted");
+
+      if(!(inMount && persist))
+        path = path + e.FullPath() + "\\";
+
+      // The first line was commented out.  Don't know why.  Not setting "forceSearch" to true results in
+      // the contents of mounted volumes being ignored when running against "selected files only"
+      Recurse(v, true, path, true);
+      //Recurse(v, true, path, false);
+
+    } else
+      MyConsole.WriteEndLine("...failed");
+  }
+#endif
+
+#ifdef VERSION_6
+  void Recurse_entry(EntryClass e, bool inMount, const String &path, bool forceSearch){
+    // There are two entry points for the script - one as a the 'regular'
+    //    and one as a "Trust Me" script, in which the user has
+    //    blue-checked a set of files and we just need to carve them out
+    // The second usage would have NO plugins
+    if(MyPlugins){
+      if(MyOptions.DebugCurrentOnly) {
+        MyPictureOutput.ClearCurrentReport();
+        MyMovieOutput.ClearCurrentReport();
+      }
+
+      // Compare the Logical Size against the Volume itself - some entries are reporting Petabytes in size due to corrupted MFT entries.
+      bool b = true;
+      VolumeClass vc = e.GetVolume();
+      if(vc)
+      {
+        if(vc.LogicalSize() > 0 && e.LogicalSize() > vc.LogicalSize())
+          b = false;
+      }
+
+      if(b)
+      {
+        //AnalysisController ac(MyOptions, MyPictureOutput, MyMovieOutput, e);
+        MyAnalysisController.CheckEntry(e);
+
+        if(MyAnalysisController.shouldMount){
+          // need to mount this file
+          MountFile(e, inMount, path);
+        }
+        else if(MyAnalysisController.shouldExtract){
+          // need to extract a protected archive file
+          if(MyPictureOutput)
+            MyPictureOutput.CopyOutZip(e, path);
+          else if(MyMovieOutput)
+            MyMovieOutput.CopyOutZip(e, path);
+        }
+
+        // forceSearch is TRUE when the user asked to run against selected files only
+        // but this doesn't give carte-blanche.  If the Analysis controller  ruled the file out
+        // then it needs to stay ruled out.
+        //else if(ac.shouldOpen || forceSearch){
+        if(forceSearch){
+          if(MyAnalysisController.shouldOpen)
+            MySearch.SearchEntry(e, 0, path);
+          else {
+            MyConsole.WriteFullLine("!Skipping:  " + path + e.FullPath() + "; PL: " + String::FormatInt(e.PhysicalLocation(), int::DECIMAL, 1) + "]...ruled out by AnalysisController");
+
+            if(MyOptions.Debug){
+              MyPictureOutput.WriteDebug("MainController", "User ran in Selected Files Only' mode, but the selected file was excluded by the Analysis Controller");
+              MyPictureOutput.WriteDebug("MainController", path + e.FullPath());
+
+              MyMovieOutput.WriteDebug("MainController", "User ran in Selected Files Only' mode, but the selected file was excluded by the Analysis Controller");
+              MyMovieOutput.WriteDebug("MainController", path + e.FullPath());
+            }
+          }
+        }
+
+        else if(MyAnalysisController.shouldOpen)
+          MySearch.SearchEntry(e, 0, path);
+
+        else if(MyAnalysisController.shouldOpenSlack){
+          // skip the file, but search the file slack
+          MySearch.SearchEntry(e, e.LogicalSize(), path);
+        }
+      }
+    }
+  }
+#else
+
+  void Recurse_entry(EntryClass e, const String &path, bool forceSearch){
+    // There are two entry points for the script - one as a the 'regular'
+    //    and one as a "Trust Me" script, in which the user has
+    //    blue-checked a set of files and we just need to carve them out
+    // The second usage would have NO plugins
+    if(MyPlugins){
+
+      if(MyOptions.SelectedTags.Count() != 0)
+      {
+        // Is this file tagged?
+        bool isTagged = false;
+
+        if(e.Tags().GetLength() > 0)
+        {
+          foreach(String selectedTag in MyOptions.SelectedTags)
+          {
+            if(e.Tags().Contains(selectedTag))
+            {
+              isTagged = true;
+              break;
+            }
+          }
+        }
+
+        if(MyOptions.ExcludeTagged == false){
+          // Search ONLY tagged files
+          if(!isTagged)
+            return;
+        }
+        else
+        {
+          // Or search anything NOT tagged
+          if(isTagged)
+            return;
+        }
+      }
+
+
+      if(MyOptions.DebugCurrentOnly) {
+        MyPictureOutput.ClearCurrentReport();
+        MyMovieOutput.ClearCurrentReport();
+      }
+
+      // Compare the Logical Size against the Volume itself - some entries are reporting Petabytes in size due to corrupted MFT entries.
+      bool b = true;
+      VolumeClass vc = e.GetVolume();
+      if(vc)
+      {
+        if(e.LogicalSize() > vc.TotalCapacity())
+          b = false;
+      }
+
+      if(b)
+      {
+        //AnalysisController ac(MyOptions, MyPictureOutput, MyMovieOutput, e);
+        MyAnalysisController.CheckEntry(e);
+
+        if(MyAnalysisController.shouldExtract){
+          // need to extract a protected archive file
+          if(MyPictureOutput)
+            MyPictureOutput.CopyOutZip(e, path);
+          else if(MyMovieOutput)
+            MyMovieOutput.CopyOutZip(e, path);
+        }
+        else if(MyAnalysisController.shouldOpen || forceSearch){
+          MySearch.SearchEntry(e, 0, path);
+        }
+        else if(MyAnalysisController.shouldOpenSlack){
+          // skip the file, but search the file slack
+          MySearch.SearchEntry(e, e.LogicalSize(), path);
+        }
+      }
+      else
+      {
+        if(MyOptions.Debug){
+            MyPictureOutput.WriteDebug("MainController", "Reported size of Entry in case exceeds the size of the Volume.  Skipping this file.");
+            MyPictureOutput.WriteDebug("MainController", path + e.FullPath());
+
+            MyMovieOutput.WriteDebug("MainController", "Reported size of Entry in case exceeds the size of the Volume.  Skipping this file.");
+            MyMovieOutput.WriteDebug("MainController", path + e.FullPath());
+          }
+      }
+    }
+  }
+#endif
+
+
+#ifdef VERSION_6
+  // Called on 'regular' entries
+  void Recurse(EntryClass entry, bool inMount, const String &path, bool forceSearch){
+    forall(EntryClass e in entry){
+      Recurse_entry(e, inMount, path, forceSearch);
+    }
+  }
+
+  // Called on 'EntryArray' entries (a list of entries, saved at script launch)
+  void Recurse(EntryArray entries, bool inMount, const String &path){
+    foreach(EntryClass e in entries){
+      Recurse_entry(e, inMount, path, true);
+    }
+  }
+
+#else
+  void Recurse(const String &path, bool forceSearch){
+    for(MyOptions.MyIter; EntryClass e = MyOptions.MyIter.GetNextEntry();) {
+      Recurse_entry(e, path, forceSearch);
+    }
+  }
+#endif
+
+  bool initialized;
+
+  void Initialize(){
+
+    if(!initialized){
+      initialized = true;
+
+      // Initial values
+      if(MyMovieOutput){
+        MyMovieOutput.FileCount = 0;
+        MyMovieOutput.DiskId = 1;
+        MyMovieOutput.SubDiskId = 1;
+
+        if(MyPlugins)
+          MyMovieOutput.Initialize(false, MyPlugins);
+        else
+          MyMovieOutput.Initialize(true, MyPlugins);
+      }
+
+      if(MyPictureOutput){
+        MyPictureOutput.FileCount = 0;
+        MyPictureOutput.DiskId = 1;
+        MyPictureOutput.SubDiskId = 1;
+
+        if(MyPlugins)
+          MyPictureOutput.Initialize(false, MyPlugins);
+        else
+          MyPictureOutput.Initialize(true, MyPlugins);
+      }
+
+      // Initialize Database
+      MyData.SetConnection();
+
+      // Initialize LEF if required
+      if(MyOptions.CreateLef)
+      {
+        String path = MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\LEF";
+        if (!LocalMachine.PathExists(path)){
+          if(!LocalMachine.CreateFolder(path))
+            MyConsole.WriteFullLine("Could not create the LEF folder! (" + path + ")");
+        }
+
+        // Use 4GB files for the L0's, and mid-line compression
+        EvidenceFileClass ef();
+        ef.SetSegmentSize(4096);
+        ef.SetCompression(EvidenceFileClass::COMPRESSFAST);
+
+        MyOptions.Lef = new LogicalEvidenceFileClass();
+
+
+        if(!MyOptions.Lef.Open(path + "\\C4Allv2 - " + MyOptions.CaseName + ".L01", 0, ef))
+        {
+          MyConsole.WriteFullLine("Could not create the Logical Evidence File! (" + path + "\\C4Allv2 - " + MyOptions.CaseName + ".L01");
+          SystemClass::Exit();
+        }
+      }
+    }
+  }
+
+  void Start(long enabled){
+    Initialize();
+
+#ifdef VERSION_8
+    if(MyOptions.SearchSelected >= 3)
+    {
+      // Current view
+      MyOptions.MyIter = new ItemIteratorClass(MyOptions.Case, ItemIteratorClass::NOPROXY | ItemIteratorClass::NOEPRECORDS, ItemIteratorClass::CURRENTVIEW);
+    }
+    else
+    {
+      // All files
+      MyOptions.MyIter = new ItemIteratorClass(MyOptions.Case, ItemIteratorClass::NOPROXY | ItemIteratorClass::NOEPRECORDS, ItemIteratorClass::ALL);
+    }
+#endif
+
+    DateClass startedAt;
+    startedAt.Now();
+    MyConsole.WriteFullLine("Search Start:");
+
+#ifdef VERSION_6
+    // Search the files
+    if(enabled > 0){
+      // Do we want selected files or all files?
+      if(MyOptions.SearchSelected == 1 && MyOptions.SearchSlack == 0 && MyOptions.ExcludeUnallocated == 0){
+        SystemClass::Message(SystemClass::MBOK, "Selections Saved", "Your selections have been saved.  You can alter them now without impacting this script");
+        Recurse(MyOptions.SelectedEntries, false, "");
+      }
+      else {
+        if(MyOptions.SearchSelected == 1){
+          if(MyOptions.SearchSlack)
+            SystemClass::Message(SystemClass::MBOK, "Selections NOT Saved", "You asked to search slack of any unselected file.\n" +
+                                                                            "For this reason the script could not 'save' your selections.\n" +
+                                                                            "Do Not make any changes to your blue-checked selections while the script is running.");
+          if(MyOptions.ExcludeUnallocated == 1)
+            SystemClass::Message(SystemClass::MBOK, "Selections NOT Saved", "You asked to ignore any unallocated entires.\n" +
+                                                                            "For this reason the script could not 'save' your selections.\n" +
+                                                                            "Do Not make any changes to your blue-checked selections while the script is running.");
+        }
+
+        Recurse(MyOptions.Case.EntryRoot(), false, "", false);
+      }
+    }
+#else
+    if(enabled > 0){
+      Recurse("", false);
+    }
+#endif
+
+  }
+}
+

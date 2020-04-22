@@ -1,0 +1,22 @@
+// This is the DialogClass that ties all of the plugin classes together
+include "..\\..\\ActivePlugins"
+include "..\\PluginList"
+
+class PicturePluginsDialog: DialogClass {
+
+  ActivePlugins MyActivePlugins;
+
+  PicturePluginsDialog(DialogClass parent, ActivePlugins myActivePlugins) :
+    DialogClass(parent, "Picture File Formats:"),
+      MyActivePlugins = myActivePlugins
+    {
+
+    foreach(PluginList p in MyActivePlugins.myPlugins){
+      foreach(SymbolClass::InheritClass ic in p.Plugin.DynamicType().InheritList()){
+        if(ic.Type().Name() == "PicturePluginInterface"){
+          DialogClass dlg = p.Plugin.GetDialog(this);
+        }
+      }
+    }
+  }
+}

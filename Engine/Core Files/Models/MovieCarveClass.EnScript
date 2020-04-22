@@ -1,0 +1,33 @@
+include "CarveClass"
+
+class MovieCarveClass: CarveClass {
+
+  double   MovieLength;
+
+  MovieCarveClass(MemoryFileClass mf, EntryClass entry, long fileLength, long offset, const String &extension, const String &metaData, double movieLength):
+    MF = mf,
+    MovieLength = movieLength,
+    FileLength = fileLength,
+    Offset = offset,
+    Entry = entry,
+    Extension = extension,
+    MetaData = metaData
+  {
+  #ifndef VERSION_6
+    GetMonikers();
+  #endif
+  }
+
+  MovieCarveClass(EntryClass entry, long fileLength, long offset, const String &extension, const String &metaData, double movieLength):
+    MovieLength = movieLength,
+    FileLength = fileLength,
+    Offset = offset,
+    Entry = entry,
+    Extension = extension,
+    MetaData = metaData
+  {
+  #ifndef VERSION_6
+    GetMonikers();
+  #endif
+  }
+}

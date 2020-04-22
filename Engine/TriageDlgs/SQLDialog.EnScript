@@ -1,0 +1,53 @@
+/*
+  Dialog to collect information about connecting to mySQL or SQL Server
+*/
+
+include "..\\Classes\\OptionsClass"
+include "..\\Core Files\\Controllers\\HelpController"
+
+class SQLDialog: DialogClass{
+
+  HelpController    MyHelp;
+  ButtonClass       btnHelp;
+  StaticTextClass   lblLibrary;
+  StringEditClass   txtServerName;
+  StringEditClass   txtDatabase;
+  StringEditClass   txtLoginName;
+  StringEditClass   txtPassword;
+  StaticTextClass   lblPort;
+
+
+  OptionsClass MyOptions;
+
+  SQLDialog(DialogClass parent, OptionsClass myOptions, HelpController myHelp):
+    DialogClass(parent, "Pre-Categorization Settings: SQL Server"),
+      btnHelp       (this, "?",           220,  4,  20, 12, 0),
+      lblLibrary    (this, "Enter the Named Instance of SQL Server:",
+                                         10, 10, 180, 12, 0),
+      txtServerName (this, "Server Name:",
+                                         10, 24, 220, 12, 0, myOptions.ServerName, 256, WindowClass::REQUIRED),
+      txtDatabase   (this, "Database Name:",
+                                         10, 54, 220, 12, 0, myOptions.DbName, 245, WindowClass::REQUIRED),
+      txtLoginName  (this, "SQL Login:",
+                                         10, 84, 220, 12, 0, myOptions.LoginName, 256, WindowClass::REQUIRED),
+      txtPassword   (this, "SQL Password:",
+                                         10,114, 220, 12, WindowClass::PASSWORD, myOptions.Password, 256, WindowClass::REQUIRED),
+
+      lblPort       (this, "   NOTE: to connect over IP, use the following syntax:\n" +
+                           "                     [IP Address],[port]",
+                                         10, 154, 180, 12, 0),
+
+
+    MyOptions = myOptions,
+    MyHelp = myHelp
+  {
+  }
+
+  virtual void ChildEvent(const EventClass &event) {
+    DialogClass::ChildEvent(event);
+
+    if(btnHelp.Matches(event)){
+      MyHelp.ShowHelp(1011);
+    }
+  }
+}

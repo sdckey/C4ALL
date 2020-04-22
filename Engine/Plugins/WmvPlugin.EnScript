@@ -1,0 +1,200 @@
+include "..\\Core Files\\Interfaces\\MoviePluginInterface"
+include "WMV Parser\WMV Parser"
+
+class WmvPlugin;
+
+class WmvDialog: DialogClass {
+  CheckBoxClass    chkWMV;
+  LongEditClass    minWMV, maxWMV;
+  StaticTextClass  txtWMV;
+  StaticTextClass  txtAuthor;
+
+  WmvDialog(DialogClass parent, WmvPlugin wmv) :
+    DialogClass    (parent, "WMV Settings:"),
+      chkWMV       (this, "Search For WMVs",  10,  10,  100,  12, 0, wmv._enabled),
+      minWMV       (this, "Minimum file size (bytes: 0 - 10,000,000)", 10, 35, 100, 12, 0, wmv._wmvMin, 0, 10000000, WindowClass::REQUIRED),
+      txtWMV       (this, "90 kb = 1 second of movie (on average).  By default this script will look for movies " +
+                          "5 seconds or longer.", 10,  60,  220,  24, 0),
+      maxWMV       (this, "Maximum file size (bytes: 9,000 - 10,000,000,000)", 10, 95, 100, 12, 0, wmv._wmvMax, 9, 10000000000, WindowClass::REQUIRED),
+      txtAuthor      (this, "Plugin developed by:\r\n" +
+                            "\r\n" +
+                            "Trevor Fairchild\r\n" +
+                            "Electronic Crime Section\r\n" +
+                            "Ontario Provincial Police\r\n" +
+                            "C4P@e-crime.on.ca",
+                                        175, 175, 100, 50, 0)
+  {
+  }
+}
+
+class WmvPlugin: MoviePluginInterface{
+
+  WmvDialog   _dlg;
+
+  bool        _enabled;
+  bool        findWMA;
+  bool        hasData;
+  bool        hasHDRL;
+
+
+  double      _movieLength;
+
+  int         _headerIndex;
+
+  long        ObjectSize;
+  long        totalSize;
+  long        _wmvMax;
+  long        _wmvMin;
+  long        _rangeToIgnoreSearchHits;
+
+  String      _extension;
+  String      _header;
+  String      _metaData;
+  String      _pluginName;
+  String      info;
+  String      _version;
+
+  WmvClass    MyWmv;
+
+  WmvPlugin()
+  {
+    _pluginName = "C4M Plugin - WMV";
+    _enabled = true;
+    _extension = "WMV";
+    _header = "\\x30\\x26\\xB2\\x75\\x8E\\x66\\xCF\\x11\\xA6\\xD9\\x00\\xAA\\x00\\x62\\xCE\\x6C";
+    _metaData = "";
+    _wmvMin = 450000;
+    _wmvMax = 10000000000;
+    _loadSettings();
+
+    _version = "1.0.0";
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("wmvEnabled", _enabled);
+    myStorage.Value("wmvMin", _wmvMin);
+    myStorage.Value("wmvMax", _wmvMax);
+  }
+
+
+  long _validate(EntryClass e, long offset){
+    MyWmv = new WmvClass(_pluginName, _observer);
+    _metaData = "";
+    _movieLength = -1;
+
+    EntryFileClass file();
+
+    #ifdef VERSION_6
+      file.Open(e, FileClass::SLACK);
+    #else
+      file.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
+    #endif
+
+    file.Seek(offset);
+    file.SetCodePage(CodePageClass::ANSI);
+
+    totalSize = MyWmv.Validate(e, offset);
+    if(MyWmv.HeaderObject.FilePropertiesObject)
+      _metaData = MyWmv.HeaderObject.FilePropertiesObject.PlayDuration / 1000000;
+    else
+      _metaData = "";
+
+    if(totalSize != 0){
+      // to deal with partially downloaded movies, if the offset is 0 and the file is good, then
+      //  just take the logical size
+      if(offset == 0 &! e.IsUnallocated()){
+        WriteDebug(_pluginName, "WMV validated (size = " + totalSize + ").  Given the search hit was at offset 0, using the entry's Logical Size instead (" + e.LogicalSize() + ")", false);
+        totalSize = e.LogicalSize();
+      }
+    }
+
+    if(totalSize > _wmvMax){
+      WriteDebug(_pluginName, "WMV validated, but size (" + totalSize + ") exceeds format's maximum (" + _wmvMax + ")", false);
+      totalSize = _wmvMax;
+    }
+
+    if(totalSize < _wmvMin){
+      WriteDebug(_pluginName, "WMV validated, but size (" + totalSize + ") is under the format's minimum (" + _wmvMin + ")", false);
+      totalSize = 0;
+    }
+
+    _rangeToIgnoreSearchHits = totalSize;
+    return totalSize;
+  }
+
+
+
+
+
+
+  // ==============================================
+  // Interface methods
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return null;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+  virtual String MetaData(){
+    return _metaData;
+  }
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new WmvDialog(parent, this);
+    return _dlg;
+  }
+  virtual long Validate(EntryClass e, long offset){
+    return _validate(e, offset);
+  }
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual double MovieLength(){
+    return _movieLength;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 102400;  // 100kb
+  }
+  // ==============================================
+}

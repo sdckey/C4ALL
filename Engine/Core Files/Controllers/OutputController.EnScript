@@ -1,0 +1,637 @@
+/*
+29-Sep-2010: fixed goof in the CopyOutZip method - the ZIPfile and ZIPout variables had been reversed in the WriteBuffer line
+*/
+
+
+include "..\\Controllers\\ConsoleController"
+include "..\\Controllers\\DataController"
+include "..\\Controllers\\HashController"
+include "..\\Controllers\\XMLCharacterController"
+include "..\\Models\\PictureCarveClass"
+include "..\\Models\\MovieCarveClass"
+include "..\\..\\Classes\\OptionsClass"
+
+class OutputController {
+
+
+#ifdef VERSION_6
+  BookmarkFolderClass   BookmarkRoot,
+                        ExcludeRoot,
+                        FailedRoot;
+#else
+  BookmarkClass         BookmarkRoot,
+                        ExcludeRoot,
+                        FailedRoot;
+#endif
+
+  ConsoleController     MyConsole;
+  DataController        MyData;
+  HashController        MyHash;
+  LocalFileClass        ReportIndex,
+                        CaseReport,
+                        CurrentReport,
+                        DebugReport,
+                        VictimReport,
+                        ZipReport;
+
+  int                   Cat1;
+  int                   Cat2;
+  int                   Cat3;
+  int                   Cat4;
+  int                   Cat5;
+  int                   Cat6;
+  int                   Cat7;
+  int                   Cat8;
+  int                   Cat9;
+  int                   Cat10;
+  int                   Cat11;
+  int                   CatX;
+  int                   DiskId;
+  int                   SubDiskId;
+
+  long                  DebugReportId,
+                        DebugReportSize,
+                        FileCount,
+                        ExcludedSmallCount;
+
+  long                  ExportToFolderCount;
+  long                  SubFolderSize;
+  long                  FailedCount;
+  long                  FolderSize;
+  long                  LocalFileCount;
+
+  OptionsClass          MyOptions;
+
+
+  String                FolderName;
+  String                MyReportPath;
+  String                SubFolderName;
+
+  // Must override methods
+  pure String GetIndexPath();
+  pure void OpenIndexFile(bool append);
+  pure void Initialize(bool trustMe, ActivePlugins plugins);
+  pure void CloseVictimFile();
+
+  void StartIndexFile(){
+    if(!this) return;
+
+    OpenIndexFile(false);
+    ReportIndex.WriteLine("<?xml version=\"1.0\" encoding=\"utf-16\"?>");
+    ReportIndex.WriteLine("  <ReportIndex version=\"2.0\">\r\n");
+  }
+
+  void EndIndexFile(){
+    if(!this) return;
+
+    OpenIndexFile(true);
+    ReportIndex.WriteLine("  </ReportIndex>");
+    ReportIndex.Close();
+  }
+
+
+
+
+  // ## Formatting Operations
+  String PadNumber(int val){
+    if(!this) return "";
+
+    String newVal = val;
+    while(newVal.GetLength() < 8)
+      newVal = "0" + newVal;
+    return newVal;
+  }
+
+  static String ReturnDateString(DateClass d){
+    String dateVal;
+    //dateVal = d.GetString("dd-MMM-yyyy", "HH:mm:ss", d.GetTimeZoneBias() );
+    dateVal = d.GetUnix() - d.GetTimeZoneBias();
+
+    return dateVal;
+  }
+  // ##
+
+
+
+
+
+  // ## Alert Operations
+  void Message(const String &title, const String &body){
+    if(!this) return;
+
+    SystemClass::Message(SystemClass::MBOK, title, body);
+  }
+  // ##
+
+
+#ifdef VERSION_8
+  // ## Bookmarking
+  void AddPictureBookmark(BookmarkClass parent, const String &name, const String &comment, EntryClass e, long fileOffset, long fileSize){
+    BookmarkDecodeClass data(parent, name);
+    data.CopyItemData(e);
+    data.SetDataSize(fileSize);
+    data.SetDataOffset(fileOffset);
+    data.SetCodingType(PICTURE);
+    data.SetComment(comment);
+  }
+#endif
+
+
+  // ## File / Folder Output
+  void ClearCurrentReport(){
+    if(!this) return;
+
+    if(CurrentReport.IsOpen())
+      CurrentReport.Close();
+
+    String path = MyReportPath + "\\Debug\\Current Report.txt";
+    if(!CurrentReport.Open(path, FileClass::WRITE))
+      MyConsole.WriteFullLine("Could not open: " + path);
+    CurrentReport.SetCodePage(CodePageClass::ANSI);
+
+  }
+
+  void WriteDebug(const String &source, const String &val){
+    if(!this) return;
+
+    String line = "##" + source + "##: " + val;
+
+    if(MyOptions.DebugCurrentOnly){
+      if(!CurrentReport.IsOpen()){
+        String path = MyReportPath + "\\Debug\\Current Report.txt";
+        if(!CurrentReport.Open(path, FileClass::APPEND))
+          MyConsole.WriteFullLine("Could not open: " + path);
+        CurrentReport.SetCodePage(CodePageClass::ANSI);
+      }
+      CurrentReport.WriteLine(line);
+      //CurrentReport.Close();
+    }
+    else {
+      if(!DebugReport.IsOpen()){
+        String path = MyReportPath + "\\Debug\\Debug Report_" + DebugReportId + ".txt";
+        if(!DebugReport.Open(path, FileClass::APPEND))
+          MyConsole.WriteFullLine("Could not open: " + path);
+        DebugReport.SetCodePage(CodePageClass::ANSI);
+      }
+
+      DebugReport.WriteLine(line);
+      DebugReportSize = DebugReportSize + line.GetLength() ;
+      //DebugReport.Close();
+
+      if(DebugReportSize > 50000000){
+        DebugReportId++;
+        DebugReportSize = 0;
+        DebugReport.Close();
+      }
+    }
+  }
+
+
+
+  void StartCaseReport(bool trustMe){
+    if(!this) return;
+
+    LocalFileClass lf();
+
+    String encaseVersion = SystemClass::MajorVersion() + "." + SystemClass::MinorVersion() + "." + SystemClass::SubMajorVersion() + "." + SystemClass::SubMinorVersion();
+
+    if (lf.Open(MyReportPath + "\\Case Report.xml", FileClass::WRITETEXTCRLF)) {
+      lf.WriteLine("<?xml version=\"1.0\" encoding=\"utf-16\"?>");
+      lf.WriteLine("  <CaseReport>");
+      lf.WriteLine("    <CaseNumber><![CDATA["     + MyOptions.CaseName        + "]]></CaseNumber>");
+      lf.WriteLine("    <Analyst><![CDATA["        + MyOptions.ForensicAnalyst + "]]></Analyst>");
+      lf.WriteLine("    <Date><![CDATA["           + MyOptions.StartDate       + "]]></Date>");
+      lf.WriteLine("    <Time><![CDATA["           + MyOptions.StartTime       + "]]></Time>");
+      lf.WriteLine("    <Comment><![CDATA["        + MyOptions.Comments        + "]]></Comment>");
+
+      if(!trustMe)
+        lf.WriteLine("    <ScriptVersion><![CDATA[EnScript v"  + MyOptions.VersionNum      + "]]></ScriptVersion>");
+      else
+        lf.WriteLine("    <ScriptVersion><![CDATA['Trust Me' EnScript v"  + MyOptions.VersionNum      + "]]></ScriptVersion>");
+
+      lf.WriteLine("    <EnCaseVersion><![CDATA[EnCase v"  + encaseVersion              + "]]></EnCaseVersion>");
+
+    } else
+      MyConsole.WriteFullLine("Could not copy the case report! (" + MyReportPath + "\\Case Report.xml)");
+    lf.Close();
+  }
+
+  void EndCaseReport(){
+    if(!this) return;
+
+    LocalFileClass lf();
+    if (lf.Open(MyReportPath + "\\Case Report.xml", FileClass::APPEND)) {
+      lf.WriteLine("    <Excluded><![CDATA["  +  CatX  + "]]></Excluded>");
+      lf.WriteLine("  </CaseReport>");
+    } else
+      MyConsole.WriteFullLine("Could not reopen the case report! (" + MyReportPath + "\\Case Report.xml)");
+    lf.Close();
+  }
+
+
+  void MakeNewFolder(){
+    if(!this) return;
+
+    if(DiskId < 10)
+      FolderName = "DVD0" + DiskId;
+    else
+      FolderName = "DVD" + DiskId;
+
+    FolderName = FolderName + "(" + MyOptions.CaseName + ")";
+
+    String path = MyReportPath + "\\" + FolderName;
+
+    if(!LocalMachine.PathExists(path)){
+      if(!LocalMachine.CreateFolder(path))
+        MyConsole.WriteFullLine("Could not create the folder! (" + path + ")");
+    }
+
+    DiskId++;
+    SubDiskId = 1;
+    FolderSize = 0;
+    ExportToFolderCount = 0;
+
+    MakeNewSubFolder();
+  }
+
+  void MakeNewSubFolder(){
+    if(!this) return;
+
+    if(SubDiskId < 10)
+      SubFolderName = "0" + SubDiskId;
+    else
+      SubFolderName = SubDiskId;
+
+    String path = MyReportPath + "\\" + FolderName + "\\" + SubFolderName;
+    if(!LocalMachine.PathExists(path)){
+      if(!LocalMachine.CreateFolder(path))
+        MyConsole.WriteFullLine("Could not create the sub-folder! (" + path + ")");
+    }
+
+    SubDiskId++;
+    SubFolderSize = 0;
+    ExportToFolderCount = 0;
+  }
+
+  void CopyOutZip(EntryClass entry, const String &path){
+    if(!this) return;
+
+    // Protected or Unmountable (in EnCase) Zip Volume - if desired, then copy this file out for cracking
+    EntryFileClass ZIPfile();
+    LocalFileClass ZIPout();
+
+    MyOptions.ZipCount++;
+
+    if(ZIPfile.Open(entry, FileClass::SLACK)){
+      String outPath = MyOptions.ProtectedPath + PadNumber(MyOptions.ZipCount) + ".zip";
+
+      if(ZIPout.Open(outPath, FileClass::WRITETEXTCRLF)){
+        ZIPout.WriteBuffer(ZIPfile, entry.LogicalSize());
+
+        if (!ZipReport.IsOpen()){
+          String outPath2 = MyReportPath + "\\Protected Files.txt";
+          if(ZipReport.Open(outPath2, FileClass::APPEND)){
+            ZipReport.WriteLine(PadNumber(MyOptions.ZipCount) + "*" + path + entry.FullPath());
+
+          } else
+            MyConsole.WriteFullLine("Could not open: " + outPath2);
+        }
+      } else
+       MyConsole.WriteFullLine("Could not open: " + outPath );
+
+    } else
+      MyConsole.WriteFullLine("Could not open: " + path + entry.FullPath());
+  }
+
+  bool Extract(FileClass fc, CarveClass cc, const String &path, int count = 0){
+    if(!this) return false;
+
+    // If the file is already there, then don't copy it again (maybe??)
+    if(!LocalMachine.PathExists(path))
+    {
+
+      LocalFileClass outFile();
+      if (outFile.Open(path, FileClass::WRITETEXTCRLF)) {
+
+        // If this is a memory file class, then the offset is ZERO, but otherwise we use the
+        // CarveClass offset to get to the right spot in the EntryFileClass object
+        if(cc.MF)
+          fc.Seek(0);
+        else
+          fc.Seek(cc.Offset);
+
+        outFile.WriteBuffer(fc, cc.FileLength);
+
+        // Now verify the file was actually extracted
+         if(!LocalMachine.PathExists(path)){
+          Console.WriteLine("File supposed to extract, but it didn't!  Failed Path: " + path);
+          count++;
+          if(count < 5)
+            return Extract(fc, cc, path, count);
+          else
+          {
+            if(MyOptions.IgnoreFailedExtract) {
+              // do something...should we bookmark?
+              Console.WriteLine("File could not be extracted.  Bookmarking instead: " + path);
+
+#ifdef VERSION_6
+              FailedRoot.AddBookmark(cc.Entry, cc.Offset, 10, "Could not Extract File", BookmarkClass::SHOWPICTURE, BookmarkClass::PICTURE);
+#else
+              AddPictureBookmark(FailedRoot, cc.Entry.Name(), "Could not Extract File", cc.Entry, cc.Offset, 10);
+#endif
+              return false;
+            }
+            else {
+              Console.WriteLine("Extract attempted four times and failed every time.  Script cancelled.");
+              SystemClass::Exit();
+            }
+          }
+        }
+
+
+        // Put this into a Logical Evidence File as well, if requested
+        if(MyOptions.CreateLef)
+        {
+          // Back to the beginning of the output file
+          outFile.Seek(0);
+
+          LogicalEvidenceFileClass::DataClass data(null, "", 0);
+          data.Path = path.SubString(MyOptions.ReportPath.GetLength()+1);
+          data.SetTarget(outFile, LogicalEvidenceFileClass::DataClass::MODEFILE);
+
+          if (!MyOptions.Lef.Add(data)){
+            Console.WriteLine("Could not add file " + path + " to Logical evidence file.");
+            SystemClass::Exit();
+          }
+        }
+
+        outFile.Close();
+
+        return true;
+
+      }
+      else {
+        MyConsole.WriteFullLine("Failed to open local path: " + path);
+        return false;
+      }
+
+      return false;
+    }
+    else
+      return true;
+  }
+
+  void AddBookmark(CarveClass cc, const String &fileName){
+    if(!this) return;
+
+    if(MyOptions.MakeBookmarks){
+#ifdef VERSION_6
+      BookmarkRoot.AddBookmark(cc.Entry, cc.Offset, cc.FileLength, fileName, BookmarkClass::SHOWPICTURE, BookmarkClass::PICTURE);
+#else
+      AddPictureBookmark(BookmarkRoot, cc.Entry.Name(), fileName, cc.Entry, cc.Offset, cc.FileLength);
+#endif
+    }
+  }
+
+  void _addVictimEntry(const String &victimPath, const String &hash){
+    VictimReport.WriteLine("<Image>\r\n" +
+                           "  <hash>"                + hash          + "</hash>\r\n" +
+                           "  <path><![CDATA["       + victimPath    + "]]></path>\r\n" +
+                           "</Image>\r\n");
+    VictimReport.Close();
+  }
+  void AddVictimEntry(const String &victimPath, const String &hash){
+    if(!this) return;
+
+    if (victimPath != ""){
+      if(!VictimReport.IsOpen()){
+
+        String path = MyReportPath + "\\Victim Report.xml";
+
+        if(VictimReport.Open(path, FileClass::APPEND)){
+          _addVictimEntry(victimPath, hash);
+        } else
+          MyConsole.WriteFullLine("Could not open: " + path);
+      }
+      else {
+        // For whatever reason the victim report is still open, so just write to it and then close
+        _addVictimEntry(victimPath, hash);
+      }
+      MyOptions.VictimCount++;
+    }
+  }
+
+  void CopyToLibrary(const String &path, const String &hash, const String &ext){
+    if(!this) return;
+
+    // If desired, copy this file into the Picture Library
+    if(MyOptions.MakeLibrary && MyOptions.LibraryPath != ""){
+      String tempPath = MyOptions.LibraryPath;
+
+      tempPath = tempPath + "\\" + hash.SubString(0,1);
+      if(!LocalMachine.PathExists(tempPath))
+        LocalMachine.CreateFolder(tempPath);
+
+      tempPath = tempPath + "\\" + hash.SubString(1,1);
+      if(!LocalMachine.PathExists(tempPath))
+        LocalMachine.CreateFolder(tempPath);
+
+      tempPath = tempPath + "\\" + hash.SubString(2,1);
+      if(!LocalMachine.PathExists(tempPath))
+        LocalMachine.CreateFolder(tempPath);
+
+      tempPath = tempPath + "\\" + hash + "." + ext;
+
+
+      if(MyOptions.Debug)
+        WriteDebug("OutputController", "Adding " + hash + " to Picture Library");
+
+      if(!LocalMachine.PathExists(tempPath)){
+        LocalFileClass lfSource();
+
+        if(lfSource.Open(path)){
+          LocalFileClass lfTarget();
+
+          if(lfTarget.Open(tempPath, FileClass::WRITETEXTCRLF)){
+            lfTarget.WriteBuffer(lfSource, -1);
+            lfTarget.Close();
+            lfSource.Close();
+          } else
+            Console.WriteLine("Could not open: " + tempPath);
+        } else
+          Console.WriteLine("Could not open: " + path);
+      }
+    }
+  }
+
+  void WriteResults(const String &msg){
+    LocalFileClass lf();
+    if (lf.Open(MyReportPath + "\\Results.txt", FileClass::WRITETEXTCRLF))
+      lf.WriteLine(msg);
+    else
+      MyConsole.WriteFullLine("Could not copy the case report! (" + MyReportPath + "\\Case Report.xml)");
+    lf.Close();
+  }
+
+  void SaveSettings(ActivePlugins plugins)
+  {
+    LocalFileClass settings();
+    if(settings.Open(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\script settings.txt", FileClass::WRITE)){
+      settings.SetCodePage(CodePageClass::ANSI);
+
+      settings.WriteLine("Script Version:      " + MyOptions.VersionNum);
+      settings.WriteLine("Script Compile Date: " + MyOptions.CompileDate);
+      settings.WriteLine("");
+
+      settings.WriteLine("Main Settings Page:");
+      settings.WriteLine("===================");
+
+      // C4P / C4M Disclosure Package Options
+      settings.WriteLine("Create Package here:\t"+ MyOptions.ReportPath);
+
+      if(MyOptions.MakeBookmarks)
+        settings.WriteLine("Create a Bookmark for every file that is extracted?\tY");
+      else
+        settings.WriteLine("Create a Bookmark for every file that is extracted?\tN");
+
+      if(MyOptions.CreateLef)
+        settings.WriteLine("Preserve the C4All package in a LEF?\tY");
+      else
+        settings.WriteLine("Preserve the C4All package in a LEF?\tN");
+
+      // Selected Files Options
+      settings.WriteLine("");
+      if(MyOptions.SearchSelected == 0)
+        settings.WriteLine("Selected Files Options:\tSearch All Files");
+      else if(MyOptions.SearchSelected == 1)
+        settings.WriteLine("Selected Files Options:\tSearch All Tagged Files");
+      else if(MyOptions.SearchSelected == 2)
+        settings.WriteLine("Selected Files Options:\tExclude All Tagged Files");
+      else if(MyOptions.SearchSelected == 3)
+        settings.WriteLine("Selected Files Options:\tSearch Current View Only");
+
+      // Pre-Categorization Options
+      settings.WriteLine("");
+      if(MyOptions.DbType == 0)
+        settings.WriteLine("Pre-Categorization Options:\tNo Database");
+      else if(MyOptions.DbType == 1){
+        settings.WriteLine("Pre-Categorization Options:\tSQL Server");
+        settings.WriteLine("\tServer Name:\t" + MyOptions.ServerName);
+        settings.WriteLine("\tDatabase Name:\t" + MyOptions.DbName);
+        settings.WriteLine("\tSQL Login:\t" + MyOptions.LoginName);
+        settings.WriteLine("\tSQL Password:\t" + MyOptions.Password);
+      }
+      if(MyOptions.DbType == 2){
+        settings.WriteLine("Pre-Categorization Options:\tmySQL");
+        settings.WriteLine("\tComputer Name:\t" + MyOptions.ServerName);
+        settings.WriteLine("\tODBC Connection String:\t" + MyOptions.ODBCstring);
+      }
+      if(MyOptions.MakeLibrary)
+        settings.WriteLine("Populate Picture Librayr?\tY");
+      else
+        settings.WriteLine("Populate Picture Librayr?\tN");
+
+      // Search Options
+      settings.WriteLine("");
+      if(MyOptions.IgnoreSmall)
+        settings.WriteLine("Ignore Small Files?\tY");
+      else
+        settings.WriteLine("Ignore Small Files?\tN");
+
+      // Debugging Options
+      settings.WriteLine("");
+      if(MyOptions.Debug)
+        settings.WriteLine("Run in Debug Mode?\tY");
+      else
+        settings.WriteLine("Run in Debug Mode?\tN");
+
+      if(MyOptions.DebugCurrentOnly)
+        settings.WriteLine("Save Current Entry Only?\tY");
+      else
+        settings.WriteLine("Save Current Entry Only?\tN");
+
+      if(MyOptions.IgnoreFailedExtract)
+        settings.WriteLine("Bookmark Failed Extracts?\tY");
+      else
+        settings.WriteLine("Bookmark Failed Extracts?\tN");
+
+      if(MyOptions.SaveConsole)
+        settings.WriteLine("Save Console to disk?\tY");
+      else
+        settings.WriteLine("Save Console to disk?\tN");
+
+      settings.WriteLine("");
+      settings.WriteLine("");
+      settings.WriteLine("Case Report Values:");
+      settings.WriteLine("===================");
+      settings.WriteLine("Case Name:\t" + MyOptions.CaseName);
+      settings.WriteLine("Forensic Examiner:\t" + MyOptions.ForensicAnalyst);
+      settings.WriteLine("Comments:\t" + MyOptions.Comments);
+
+
+      settings.WriteLine("");
+      settings.WriteLine("");
+      settings.WriteLine("Exclusionary Options:");
+      settings.WriteLine("===================");
+
+      if(MyOptions.ExcludePreCatVal == 0)
+        settings.WriteLine("Ignore a Cateogry:\tNone");
+      else if(MyOptions.ExcludePreCatVal == 1)
+        settings.WriteLine("Ignore a Cateogry:\tCategory 1");
+      else if(MyOptions.ExcludePreCatVal == 2)
+        settings.WriteLine("Ignore a Cateogry:\tCategory 2");
+      else if(MyOptions.ExcludePreCatVal == 3)
+        settings.WriteLine("Ignore a Cateogry:\tCategory 3");
+      else if(MyOptions.ExcludePreCatVal == 4)
+        settings.WriteLine("Ignore a Cateogry:\tCategory 4");
+      else if(MyOptions.ExcludePreCatVal == 5)
+        settings.WriteLine("Ignore a Cateogry:\tCategory 5");
+      else if(MyOptions.ExcludePreCatVal == 6)
+        settings.WriteLine("Ignore a Cateogry:\tCategory 6");
+      else if(MyOptions.ExcludePreCatVal == 7)
+        settings.WriteLine("Ignore a Cateogry:\tCategory 7");
+      else if(MyOptions.ExcludePreCatVal == 8)
+        settings.WriteLine("Ignore a Cateogry:\tCategory 8");
+      else if(MyOptions.ExcludePreCatVal == 9)
+        settings.WriteLine("Ignore a Cateogry:\tCategory 9");
+
+      if(MyOptions.BookmarkExcludedPreCat)
+        settings.WriteLine("Bookmark these pictures instead?\tY");
+      else
+        settings.WriteLine("Bookmark these pictures instead?\tN");
+
+      // Unique Pictures
+      settings.WriteLine("");
+      if(MyOptions.ExportByHash)
+        settings.WriteLine("Store Extracted Files by their MD5?\tY");
+      else
+        settings.WriteLine("Store Extracted Files by their MD5?\tN");
+
+
+
+      settings.WriteLine("");
+      settings.WriteLine("");
+      settings.WriteLine("Plugins:");
+      settings.WriteLine("===================");
+
+      foreach(PluginList p in plugins.myPlugins){
+        if(p.Plugin){
+          settings.WriteLine("Plugin: " + p.Plugin.PluginName());
+          settings.WriteLine("\tExtension:\t" + p.Plugin.Extension());
+          settings.WriteLine("\tVersion:\t" + p.Plugin.Version());
+          if(p.Plugin.Enabled())
+            settings.WriteLine("\tEnabled?\tY");
+          else
+            settings.WriteLine("\tEnabled?\tN");
+          settings.WriteLine("\tHeader:\t" + p.Plugin.Header());
+          settings.WriteLine("\tBytesPrecedingHeader:\t" + p.Plugin.BytesPrecedingHeader());
+          settings.WriteLine("\tRangeToIgnoreSearchHits:\t" + p.Plugin.RangeToIgnoreSearchHits());
+          settings.WriteLine("\tSmallFileLimit:\t" + p.Plugin.SmallFileLimit());
+          settings.WriteLine("");
+        }
+      }
+
+      settings.Close();
+    }
+  }
+}

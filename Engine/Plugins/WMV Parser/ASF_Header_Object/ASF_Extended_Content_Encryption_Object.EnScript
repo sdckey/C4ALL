@@ -1,0 +1,37 @@
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+class ASF_Extended_Content_Encryption_Object{
+
+  ulong  ObjectId1;
+  ulong  ObjectId2;
+  long   ObjectSize;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  ASF_Extended_Content_Encryption_Object(const String &thePluginName, ObserverInterface theObserver){
+    _pluginName = thePluginName;
+    _observer = theObserver;
+  }
+
+  void Read(EntryFileClass ef, const long &offset){
+    ef.Seek(offset);
+
+    ObjectId1 = ef.ReadBinaryInt(8, true);
+    ObjectId2 = ef.ReadBinaryInt(8, true);
+    ObjectSize = ef.ReadBinaryInt(8, false);
+
+    if(offset + ObjectSize < ef.GetSize()){
+        _observer.WriteDebug(_pluginName, "    ASF_Extended_Content_Encryption_Object", false);
+        _observer.WriteDebug(_pluginName, "    ============================", false);
+        _observer.WriteDebug(_pluginName, "      Offset: " + offset, false);
+        _observer.WriteDebug(_pluginName, "      Object Size: " + ObjectSize, false);
+        _observer.WriteDebug(_pluginName, "  ", false);
+    }
+    else {
+      _observer.WriteDebug(_pluginName, "Not enough data to read the contents of this object.", false);
+    }
+
+    ef.Seek(offset + ObjectSize);
+  }
+}

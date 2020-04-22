@@ -1,0 +1,165 @@
+include "..\\Models\\OptionsClass"
+
+include "PictureOutputController"
+include "MovieOutputController"
+include "IndexOutputController"
+include "ConsoleController"
+
+
+class OverwrittenController{
+
+  OptionsClass        MyOptions;
+  ConsoleController   MyConsole;
+
+  PictureOutputController  MyPictureOutput;
+  MovieOutputController    MyMovieOutput;
+  IndexOutputController    MyIndexOutput;
+
+
+  OverwrittenController(OptionsClass myOptions,
+                        PictureOutputController myPictureOutput,
+                        MovieOutputController myMovieOutput,
+                        IndexOutputController myIndexOutput):
+    MyOptions = myOptions,
+    MyPictureOutput = myPictureOutput,
+    MyMovieOutput = myMovieOutput,
+    MyIndexOutput = myIndexOutput
+  {
+    MyConsole = new ConsoleController(MyOptions);
+  }
+
+
+  void WriteData(FileClass fc, EntryFileClass ef, long offset, long size){
+    ef.Seek(offset);
+    fc.WriteBuffer(ef, size);
+    ef.Seek(offset);
+  }
+
+  void WriteBlank(FileClass fc, long size){
+    if(fc){
+      for(int i = 0; i < size; i++)
+        fc.WriteBinaryInt(0, 1, 0);
+    }
+    else {
+      //Console.WriteLine("WriteBlank failed - fc is null");
+    }
+  }
+
+
+  void CheckSectors(FileClass fc, DeviceClass device, EntryFileClass ef, EntryClass e, FileExtentClass extent){
+    long pos = ef.GetPos();
+
+    // read in a cluster's worth of data in each loop
+    // but we have to start from the StartSector, and not the StartCluster
+
+    long sector      = extent.StartSector();
+    long clusterSize = device.BytesPerSector() * e.GetVolume().SectorsPerCluster();
+    long sectorsPerCluster = e.GetVolume().SectorsPerCluster();
+    uint offset;
+    long fileoffset;
+
+    // loop based on the number of clusters in this extent
+    for(int i = 0; i < extent.Clusters(); i++){
+      EntryClass test = device.GetEntry(sector, offset, fileoffset);
+      if(test){
+        if(test != e){
+          // means the cluster is 'owned' by another entry
+            WriteBlank(fc, clusterSize);
+            //Console.WriteLine("  Cluster " + (i+1) + " / " + extent.Clusters() + ".  Offset: " + ef.GetPos() + ".  Sector Start: " + sector + ".  Owner: " + test.FullPath());
+        }
+        else {
+          // means the cluster is 'owned' by this entry
+          WriteData(fc, ef, ef.GetPos(), clusterSize);
+          //Console.WriteLine("  Cluster owned by entry");
+        }
+
+      }
+      else {
+        //Console.WriteLine("Could not find Sector in the Device!!  " + device.Name() + ", Sector: " + sector);
+      }
+
+      sector += sectorsPerCluster;
+      ef.Skip(clusterSize);
+    }
+
+    ef.Seek(pos);
+  }
+
+
+  void ReadExtents(FileClass fc, DeviceClass device, EntryFileClass ef, EntryClass e){
+    // read in the extents of this entry
+    FileExtentClass extents = e.FileExtentRoot();
+    if(extents){
+      // loop through the extents
+      int i = 1;
+      long nextOffset;
+
+      forall(FileExtentClass extent in extents){
+        // position cursor at the beginning of this extent
+        ef.Seek(nextOffset);
+        //Console.WriteLine("Looking at Offset: " + ef.GetPos());
+
+        //// write out details of the extent
+        //Console.WriteLine("  Extent " + i + " / " + extents.Count() + ":");
+        //Console.WriteLine("    PS:       " + extent.StartSector());
+        //Console.WriteLine("    PS Count: " + extent.Sectors());
+        //Console.WriteLine("    CL:       " + extent.StartCluster());
+        //Console.WriteLine("    CL Count: " + extent.Clusters());
+
+        // now examine each sector of this Extent
+        CheckSectors(fc, device, ef, e, extent);
+
+        // update counters
+        //Console.WriteLine("");
+        i++;
+        nextOffset += (extent.Sectors() * 512);
+      }
+    }
+  }
+
+
+
+  MemoryFileClass ExciseData(EntryClass e){
+
+    // Open the Device
+    DeviceClass device = e.GetDevice();
+    if(device){
+
+      // Open the Entry
+      EntryFileClass ef();
+      ef.Open(e, FileClass::SLACK);
+      if(ef){
+        //Console.WriteLine("Looking at: " + e.FullPath());
+        ef.SetCodePage(CodePageClass::ANSI);
+
+        MemoryFileClass mf();
+        mf.Open(e.PhysicalSize(), FileClass::WRITE);
+        mf.SetCodePage(CodePageClass::ANSI);
+
+        DeviceClass device = e.GetDevice();
+        EntryFileClass ef();
+        ef.Open(e, FileClass::SLACK);
+
+        ReadExtents(mf, device, ef, e);
+
+        mf.Seek(0);
+        //Console.WriteLine(mf.GetSize());
+        //mf.Close();
+
+        return mf;
+      }
+      else {
+        String msg = "Could not open EntryFileClass: " + e.FullPath();
+        MyPictureOutput.WriteDebug("OverwrittenController", msg);
+        MyMovieOutput.WriteDebug("OverwrittenController", msg);
+      }
+    }
+    else {
+      String msg = "Could not isolate Device from Entry: " + e.FullPath();
+      MyPictureOutput.WriteDebug("OverwrittenController", msg);
+      MyMovieOutput.WriteDebug("OverwrittenController", msg);
+    }
+
+    return null;
+  }
+}

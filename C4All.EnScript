@@ -1,0 +1,453 @@
+/*
+  This is the execution point of the EnScript.
+*/
+
+include "Engine\\ActivePlugins"
+include "Engine\\Core Files\\Controllers\\ConsoleController"
+include "Engine\\Core Files\\Controllers\\HelpController"
+include "Engine\\Core Files\\Controllers\\MainController"
+include "Engine\\Core Files\\Controllers\\MovieOutputController"
+include "Engine\\Core Files\\Controllers\\PictureOutputController"
+include "Engine\\Core Files\\Controllers\\SettingsController"
+include "Engine\\Core Files\\Controllers\\VersionController"
+
+include "Engine\\TriageDlgs\\ExcludeDialog"
+include "Engine\\TriageDlgs\\ReportDialog"
+include "Engine\\Core Files\\Dialogs\\SettingsDialog"
+include "Engine\\Core Files\\Dialogs\\ZipDialog"
+
+include "Engine\\Core Files\\Interfaces\\ObserverInterface"
+
+class MainClass:ObserverInterface {
+
+  ActivePlugins     MyActivePlugins;
+  ConsoleController MyConsole;
+  DataController    MyData;
+  HelpController    MyHelp;
+  OptionsClass      MyOptions;
+
+  MovieOutputController    MyMovieOutput;
+  PictureOutputController  MyPictureOutput;
+
+  MainClass()
+  {
+    MyOptions = new OptionsClass();
+    MyOptions.CompileDate     = "18-Jul-2018";
+    MyOptions.ScriptName      = "C4All Strategy (v6/v8)";
+    MyOptions.VersionNum      = "2.0.3.0 BETA";
+    MyOptions.VersionMajor    = 8;
+    MyOptions.VersionMinor    = 7;
+    MyOptions.VersionSubMajor = 0;
+    MyOptions.VersionSubMinor = 93;
+
+    // This is the onlyt legitimate construction of the ConsoleController
+    MyConsole = new ConsoleController(MyOptions);
+    MyData = new DataController(MyOptions, MyConsole);
+    MyHelp = new HelpController(MyOptions, MyPictureOutput, MyMovieOutput, MyConsole);
+  }
+
+
+  // =====================================================================
+  // Interface methods for the Observer Pattern
+  virtual void WriteDebug(const String &source, const String &message, int type){
+    // type == 0:  movie
+    // type == 1:  picture
+    // type == 2:  text
+    if(MyOptions.Debug){
+      if(type == 1)
+        MyPictureOutput.WriteDebug(source, message);
+      else if(type == 0)
+        MyMovieOutput.WriteDebug(source, message);
+    }
+  }
+  virtual void RaiseMessage(const String &title, const String &message){
+    Message(title, message);
+  }
+  virtual void SetRange(const String &msg, long size){
+    MyOptions.StatusRange(msg, size);
+  }
+  virtual void SetStatusMessage(const String &msg){
+    SystemClass::StatusMessage(msg);
+  }
+  virtual void AppendStatusRange(const String &msg, long size){
+    MyOptions.AppendStatusRange(msg, size);
+  }
+  virtual void RestoreStatusMessage(){
+    MyOptions.RestoreStatusMessage();
+  }
+  virtual void AppendStatusMessage(const String &val){
+    MyOptions.AppendStatusMessage(val);
+  }
+
+  virtual void WriteFullLine(const String &val){
+    MyConsole.WriteFullLine(val);
+  }
+
+  virtual void WritePartLine(const String &val){
+    MyConsole.WritePartLine(val);
+  }
+
+  virtual void WriteEndLine(const String &val){
+    MyConsole.WriteEndLine(val);
+  }
+
+  virtual void WriteLine(const String &val){
+    MyConsole.WriteLine(val);
+  }
+  // =====================================================================
+
+  void Message(const String &title, const String &body){
+    SystemClass::Message(SystemClass::MBOK, title, body);
+  }
+
+  void ListPlugins(){
+    Console.WriteLine("");
+    Console.WriteLine("Following Plugins Present:\n" +
+                      "==========================");
+    foreach(PluginList p in MyActivePlugins.myPlugins){
+
+      if(p.Plugin){
+        // connect this main script to the plugin for two-way communication
+        p.Plugin.SetObserver(this);
+        p.Plugin.SetHeaderIndex(-1);
+
+        Console.WriteLine("Plugin Found.  Extension: " + p.Plugin.Extension());
+      }
+    }
+    Console.WriteLine("");
+  }
+
+  void Main(CaseClass c) {
+    SystemClass::ClearConsole();
+    MyActivePlugins = new ActivePlugins(c, MyConsole);
+    Console.WriteLine(MyOptions.ScriptName + ": Begin");
+
+    // Build a list of Plugins for this execution
+    ListPlugins();
+
+    if(c){
+
+      String version = MyOptions.VersionMajor + "." + MyOptions.VersionMinor + "." +
+                       MyOptions.VersionSubMajor + "." + MyOptions.VersionSubMinor;
+
+      // Step 1:  Load any saved data about this Script
+      MyOptions.SetCase(c);
+      SettingsController sc(MyOptions);
+      MyOptions.ReportPath = c.ExportFolder();
+
+      MyConsole.SaveConsoleChanged(MyOptions.SaveConsole);
+
+      // Step 2:  Check the version of EnCase against this Script;
+      VersionController vc(MyOptions);
+      if(vc.CheckVersion() == false){
+      }
+
+      // Step 4:  Additional settings data
+      MyOptions.Comments = "Script Tested Against EnCase v" + version;
+      sc.SetCaseName(c.Name());
+
+      // Step 5:  Start the Dialog
+#ifdef VERSION_6
+      DialogClass     mainDlg(null, MyOptions.ScriptName + " EnScript");
+        SettingsDialog  settings(mainDlg, MyOptions, MyHelp, MyActivePlugins, MyConsole);
+        ReportDialog    rpt(mainDlg, MyOptions, MyHelp);
+        ExcludeDialog   ext(mainDlg, MyOptions, MyHelp);
+        ZipDialog       zip(mainDlg, MyOptions);
+#else
+      DialogClass     mainDlg(null, MyOptions.ScriptName + " EnScript");
+        SettingsDialog  settings(mainDlg, MyOptions, MyHelp, MyActivePlugins, MyConsole);
+        ReportDialog    rpt(mainDlg, MyOptions, MyHelp);
+        ExcludeDialog   ext(mainDlg, MyOptions, MyHelp);
+#endif
+      // ===========================================================================
+
+      if(mainDlg.Execute() == SystemClass::OK){
+
+        // Step 6: Save the settings, as they may be changed by the user
+        sc.SaveSettings();
+        foreach(PluginList p in MyActivePlugins.myPlugins){
+          p.Plugin.SaveSettings();
+        }
+
+        // Make sure the user selected at least one plugin to search
+        int enabled ;
+        int picEnabled;
+        int movEnabled;
+
+        foreach(PluginList p in MyActivePlugins.myPlugins){
+          if(p.Plugin.Enabled()){
+            enabled++;
+
+            foreach(SymbolClass::InheritClass ic in p.Plugin.DynamicType().InheritList()){
+              if(ic.Type().Name() == "PicturePluginInterface"){
+                picEnabled++;
+              }
+              else if(ic.Type().Name() == "MoviePluginInterface"){
+                movEnabled++;
+              }
+            }
+          }
+        }
+
+        // Only build a picture or movie package if the user is searching for the corresponding formats
+        if(picEnabled > 0)
+          MyPictureOutput = new PictureOutputController(MyOptions, MyData, MyConsole);
+        if(movEnabled > 0)
+          MyMovieOutput = new MovieOutputController(MyOptions, MyData, MyConsole);
+
+
+        // then search the entries
+        if(enabled > 0 ){
+          // Step 7:  Trailing Spaces
+          String n = MyOptions.CaseName;
+          if(n.SubString(n.GetLength()-1,1) == " "){
+            Message("Trailing Spaces Warning", "Please note that you left one or more spaces " +
+                          "at the end of the Case Name.  Although the EnScript will fix this automatically, " +
+                          "it would be advisable to NOT do this in the future.");
+          }
+          sc.SetCaseName(n);
+
+          // Step 8:  Begin the Search Process
+          MainController mc(MyActivePlugins, MyOptions, MyPictureOutput, MyMovieOutput, MyConsole, MyData);
+          mc.Start(enabled);
+
+          // Step 9:  Close up shop
+          SetStatusMessage("Script complete.  Displaying Case Note in separate window.");
+
+
+          String myNote = MakeCaseNote();
+          Message(MyOptions.ScriptName + " " + MyOptions.VersionNum, myNote);
+          Console.WriteLine(MyOptions.ScriptName + ": End");
+
+
+          // Step 10:  Add the meta files to the LEF, if required
+          if(MyOptions.CreateLef)
+          {
+            AddFileToLef(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\C4P\\C4P Index.xml");
+            AddFileToLef(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\C4P\\Case Report.xml");
+            AddFileToLef(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\C4P\\Victim Report.xml");
+            AddFileToLef(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\C4P\\Results.txt");
+
+            AddFileToLef(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\C4M\\C4M Index.xml");
+            AddFileToLef(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\C4M\\Case Report.xml");
+            AddFileToLef(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\C4M\\Victim Report.xml");
+            AddFileToLef(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\C4M\\Results.txt");
+
+          }
+        }
+        else {
+          Message("Error", "You need to select at least one format to search for!\n" +
+                                    "Run the script again, and hit the 'Pictures' or 'Movies' " +
+                                    "buttons to check the formats you want to search for in " +
+                                    "your case.");
+          Console.WriteLine(MyOptions.ScriptName + ": End");
+        }
+      } else {
+        MyConsole.WriteLine("Script Terminated by User\n");
+        Console.WriteLine(MyOptions.ScriptName + ": End");
+      }
+    } else {
+      Message("Error", "You need a case open...");
+      Console.WriteLine(MyOptions.ScriptName + ": End");
+    }
+  }
+
+  void AddFileToLef(const String &path)
+  {
+    if(LocalMachine.PathExists(path)){
+      LocalFileClass lf();
+      lf.Open(path, 0);
+      LogicalEvidenceFileClass::DataClass data(null, "", 0);
+      data.Path = path.SubString(MyOptions.ReportPath.GetLength() + 1);
+      data.SetTarget(lf, LogicalEvidenceFileClass::DataClass::MODEFILE);
+
+      if (!MyOptions.Lef.Add(data))
+        Console.WriteLine("Could not add file " + path + " to Logical evidence file.");
+    }
+  }
+
+  String MakeCaseNote(){
+
+    // Close up Shop
+    String myNote;
+
+    DateClass myEnd;
+    myEnd.Now();
+
+    // Terminate the Index file
+    if(MyPictureOutput) MyPictureOutput.EndIndexFile();
+    if(MyMovieOutput)   MyMovieOutput.EndIndexFile();
+
+    // provincial strategy
+    if(MyPictureOutput) MyPictureOutput.CloseVictimFile();
+    if(MyMovieOutput)   MyMovieOutput.CloseVictimFile();
+
+    if(MyPictureOutput) MyPictureOutput.EndCaseReport();
+    if(MyMovieOutput)   MyMovieOutput.EndCaseReport();
+
+    String returnNote;
+
+    if(MyPictureOutput){
+      myNote = MakeCaseNote(myEnd, MyPictureOutput);
+      MyPictureOutput.WriteResults("C4P Results:\r\n" +
+                                   "=====================================" +
+                                   "\r\n" +
+                                   myNote);
+
+      returnNote = "C4P Results:\r\n" +
+                   "=====================================" +
+                   "\r\n" +
+                   myNote +
+                   "\r\n" +
+                   "\r\n";
+#ifdef VERSION_6
+      MyPictureOutput.BookmarkRoot.AddNote(myNote, 0, 0, 0);
+#else
+      BookmarkTextClass note(MyPictureOutput.BookmarkRoot, "C4P Results");
+      note.SetComment(myNote);
+#endif
+    }
+    if(MyMovieOutput){
+      myNote = MakeCaseNote(myEnd, MyMovieOutput);
+      MyMovieOutput.WriteResults("C4M Results:\r\n" +
+                                 "=====================================" +
+                                 "\r\n" +
+                                 myNote);
+
+#ifdef VERSION_6
+      MyMovieOutput.BookmarkRoot.AddNote(myNote, 0, 0, 0);
+#else
+      BookmarkTextClass note(MyMovieOutput.BookmarkRoot, "C4M Results");
+      note.SetComment(myNote);
+#endif
+      returnNote = returnNote +
+                   "C4M Results:\r\n" +
+                   "=====================================" +
+                   "\r\n" +
+                   myNote;
+    }
+
+    return returnNote;
+  }
+
+  String MakeCaseNote(DateClass myEnd, OutputController oc){
+    bool usingPrecat = false;
+    if(MyOptions.DbType != 0) usingPrecat = true;
+
+    String s = "Script Compiled: " + MyOptions.CompileDate + "\r\n" +
+               "Case Name:       " + MyOptions.CaseName + "\r\n" +
+               "Start Time:      " + MyOptions.StartDate + " " + MyOptions.StartTime + "\r\n" +
+               "End Time:        " + myEnd.GetString("dd-MMM-yyyy", "HH-mm-ss", DateClass::GetTimeZoneBias()) +
+               "\r\n" +
+               "\r\n";
+
+    if(usingPrecat)
+    {
+      s = s +  "Pre-Categorization Results:\r\n" +
+               "===========================\r\n";
+
+
+      if(MyOptions.ExcludePreCatVal == 1)
+        s = s + "Category 1: " + PadString(oc.CatX, 10) + " (excluded)\r\n";
+      else
+        s =  s + "Category 1: " + PadString(oc.Cat1, 10) + "\r\n";
+
+      if(MyOptions.ExcludePreCatVal == 2)
+        s = s + "Category 2: " + PadString(oc.CatX, 10) + " (excluded)\r\n";
+      else
+        s =  s + "Category 2: " + PadString(oc.Cat2, 10) + "\r\n";
+
+      if(MyOptions.ExcludePreCatVal == 3)
+        s = s + "Category 3: " + PadString(oc.CatX, 10) + " (excluded)\r\n";
+      else
+        s =  s + "Category 3: " + PadString(oc.Cat3, 10) + "\r\n";
+
+      if(MyOptions.ExcludePreCatVal == 4)
+        s = s + "Category 4: " + PadString(oc.CatX, 10) + " (excluded)\r\n";
+      else
+        s =  s + "Category 4: " + PadString(oc.Cat4, 10) + "\r\n";
+
+      if(MyOptions.ExcludePreCatVal == 5)
+        s = s + "Category 5: " + PadString(oc.CatX, 10) + " (excluded)\r\n";
+      else
+        s =  s + "Category 5: " + PadString(oc.Cat5, 10) + "\r\n";
+
+      if(MyOptions.ExcludePreCatVal == 6)
+        s = s + "Category 6: " + PadString(oc.CatX, 10) + " (excluded)\r\n";
+      else
+        s =  s + "Category 6: " + PadString(oc.Cat6, 10) + "\r\n";
+
+      if(MyOptions.ExcludePreCatVal == 7)
+        s = s + "Category 7: " + PadString(oc.CatX, 10) + " (excluded)\r\n";
+      else
+        s =  s + "Category 7: " + PadString(oc.Cat7, 10) + "\r\n";
+
+      if(MyOptions.ExcludePreCatVal == 8)
+        s = s + "Category 8: " + PadString(oc.CatX, 10) + " (excluded)\r\n";
+      else
+        s =  s + "Category 8: " + PadString(oc.Cat8, 10) + "\r\n";
+
+      if(MyOptions.ExcludePreCatVal == 9)
+        s = s + "Category 9: " + PadString(oc.CatX, 10) + " (excluded)\r\n";
+      else
+        s =  s + "Category 9: " + PadString(oc.Cat9, 10) + "\r\n";
+
+      s = s +  "Category 10:" + PadString(oc.Cat10, 10) + "\r\n" +
+               "Category 11:" + PadString(oc.Cat11, 10) + "\r\n" +
+               "\r\n" +
+               "Overall Results:\r\n" +
+               "===============================\r\n";
+
+      int precatTotal = (oc.Cat1 + oc.Cat2 + oc.Cat3 + oc.Cat4 + oc.Cat5 + oc.Cat6 + oc.Cat7 + oc.Cat8 + oc.Cat9 + oc.Cat10 + oc.Cat11);
+      s = s +  "Total Pre-Cat:      " + PadString(precatTotal, 10) + "\r\n" +
+               "Uncategorized:      " + PadString((oc.FileCount - precatTotal),10) + "*\r\n";
+
+      if((oc.FileCount + oc.CatX) > 0)
+      {
+        int top = (precatTotal + oc.CatX) * 100;
+        int bot = (oc.FileCount + oc.CatX) * 100;
+        int per = 100 * top / bot;
+        s = s + "Pre-Cat Percentage: " + PadString(per,10) + "%\r\n";
+
+        //s = s + "Pre-Cat Percentage: " + PadString(   ( ((precatTotal+oc.CatX) * 100) / ((oc.FileCount+oc.CatX) * 100))   ,10) + "%\r\n";
+      }
+      else
+        s = s +"Pre-Cat Percentage: 0%\r\n";
+    }
+
+    s = s +    "===============================\r\n" +
+               "Total Extracted:    " + PadString(oc.FileCount,10) + "\r\n";
+
+    if(MyOptions.IgnoreSmall)
+      s = s +  "Ignored as Small: " + PadString(oc.ExcludedSmallCount, 10) + "\r\n";
+
+
+    if(oc.CatX > 0)
+    {
+      s = s +  "Total Overall:      " + PadString((oc.FileCount + oc.CatX + oc.ExcludedSmallCount),10) + "**\r\n";
+    }
+
+
+    if(oc.FailedCount > 0)
+    {
+      s = s +  "\r\n" +
+               oc.FailedCount + " files were marked for extraction, but could not be extracted!  They have been bookmarked instead.\r\n";
+    }
+
+
+    if(usingPrecat)
+    {
+      s = s +  "\r\n" +
+               "* The EnScript does not identify Unique vs Duplicate.  These are TOTAL counts.\r\n" +
+               "** Total Overall represents all validated hits.  This includes those items which were a match to the specified EXCLUDE category.\r\n";
+    }
+
+    return s;
+  }
+
+  String PadString(String val, int length){
+    while(val.GetLength() < length)
+      val = " " + val;
+    return val;
+  }
+}

@@ -1,0 +1,94 @@
+include "..\\..\\Classes\\OptionsClass"
+
+class ConsoleController {
+
+  // There's no point in flooding the console.  So every 10,000 lines, we are going to wipe it clean
+  int             OutputCount;
+  int             counter;
+
+  LocalFileClass  console;
+  OptionsClass    MyOptions;
+
+  const int maxLines;
+
+  ConsoleController(OptionsClass myOptions):
+    MyOptions = myOptions,
+    maxLines = 10000
+  {
+    counter = 0;
+  }
+
+  ~ConsoleController()
+  {
+    if(MyOptions.SaveConsole)
+      console.Close();
+  }
+
+  void SaveConsoleChanged(bool val)
+  {
+    if(val)
+    {
+      String path = MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName;
+      if (!LocalMachine.PathExists(path))
+        LocalMachine.CreateFolder(path);
+
+      path += "\\Console";
+      if (!LocalMachine.PathExists(path))
+        LocalMachine.CreateFolder(path);
+
+      console = new LocalFileClass();
+      console.Open(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\Console\\Console_0.txt", FileClass::WRITETEXTCRLF);
+    }
+    else
+    {
+      if(console) console.Close();
+    }
+  }
+
+  void tilt()
+  {
+    SystemClass::ClearConsole();
+    OutputCount = 0;
+
+    if(MyOptions.SaveConsole)
+    {
+      counter++;
+      if(console) console.Close();
+      console.Open(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\Console\\Console_" + counter + ".txt", FileClass::WRITETEXTCRLF);
+    }
+  }
+
+
+  void WriteFullLine(const String &val){
+    OutputCount++;
+    if(OutputCount > maxLines) tilt();
+
+    DateClass d(); d.Now();
+    String line = MyOptions.ScriptName + ": " + d.GetString("dd-MMM-yyyy", "HH:mm:ss", DateClass::GetTimeZoneBias()) + ": " + val;
+    Console.WriteLine(line);
+    if(MyOptions.SaveConsole) console.WriteLine(line);
+  }
+
+  void WritePartLine(const String &val){
+    DateClass d(); d.Now();
+    String line = MyOptions.ScriptName + ": " + d.GetString("dd-MMM-yyyy", "HH:mm:ss", DateClass::GetTimeZoneBias()) + ": " + val;
+    Console.Write(line);
+    if(MyOptions.SaveConsole) console.Write(line);
+  }
+
+  void WriteEndLine(const String &val){
+    OutputCount++;
+    if(OutputCount > maxLines) tilt();
+
+    Console.WriteLine(val);
+    if(MyOptions.SaveConsole) console.WriteLine(val);
+  }
+
+  void WriteLine(const String &val){
+    OutputCount++;
+    if(OutputCount > maxLines) tilt();
+
+    Console.WriteLine(val);
+    if(MyOptions.SaveConsole) console.WriteLine(val);
+  }
+}

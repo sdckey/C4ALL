@@ -1,0 +1,26 @@
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+class ASF_Index_Object {
+
+  ulong  ObjectId1;
+  ulong  ObjectId2;
+  long   ObjectSize;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  ASF_Index_Object(const String &thePluginName, ObserverInterface theObserver){
+    _pluginName = thePluginName;
+    _observer = theObserver;
+  }
+
+  void Read(EntryFileClass ef, const long &offset){
+    ef.Seek(offset);
+
+    ObjectId1 = ef.ReadBinaryInt(8, true);
+    ObjectId2 = ef.ReadBinaryInt(8, true);
+    ObjectSize = ef.ReadBinaryInt(8, false);
+
+    ef.Seek(offset + ObjectSize);
+  }
+}

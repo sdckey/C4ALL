@@ -1,0 +1,406 @@
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+class ASF_Data_Packet;
+
+class ErrorCorrectionData{
+
+  int  ErrorCorrectionFlags;
+  int  ErrorCorrectionDataLength;
+  bool OpaqueDataPresent;
+  int  ErrorCorrectionLengthType;
+  bool ErrorCorrectionPresent;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  ErrorCorrectionData(EntryFileClass ef, const String &thePluginName, ObserverInterface theObserver){
+    long startingPos = ef.GetPos();
+    _pluginName = thePluginName;
+    _observer = theObserver;
+
+    ErrorCorrectionFlags = ef.ReadBinaryInt(1, false);
+
+    if(ErrorCorrectionFlags & 0x1)
+      ErrorCorrectionDataLength = ErrorCorrectionDataLength + 1;
+    if(ErrorCorrectionFlags & 0x2)
+      ErrorCorrectionDataLength = ErrorCorrectionDataLength + 2;
+    if(ErrorCorrectionFlags & 0x4)
+      ErrorCorrectionDataLength = ErrorCorrectionDataLength + 4;
+    if(ErrorCorrectionFlags & 0x8)
+      ErrorCorrectionDataLength = ErrorCorrectionDataLength + 8;
+
+    if(ErrorCorrectionFlags & 0x10)
+      OpaqueDataPresent = true;
+
+    if(ErrorCorrectionFlags & 0x20)
+      ErrorCorrectionLengthType = ErrorCorrectionLengthType + 1;
+    if(ErrorCorrectionFlags & 0x40)
+      ErrorCorrectionLengthType = ErrorCorrectionLengthType + 2;
+
+    if(ErrorCorrectionFlags & 0x80)
+      ErrorCorrectionPresent = true;
+
+    // for now, skip the actual error data
+    ef.Skip(ErrorCorrectionDataLength);
+
+    _observer.WriteDebug(_pluginName, "      ErrorCorrectionData, Offset " + startingPos, false);
+
+  }
+
+
+}
+
+class PayloadParsingInformation{
+
+  int     LengthTypeFlags;
+  bool    MultiplePayloadsPresent;
+  int     SequenceType;
+  int     PaddingLengthType;
+  int     PacketLengthType;
+  int     ErrorCorrectionPresent;
+
+  int     PropertyFlags;
+  int     ReplicatedDataLengthType;
+  int     OffsetIntoMediaObjectLengthType;
+  int     MediaObjectNumberLengthType;
+  int     StreamNumberLengthType;
+
+  long    PacketLength;
+  long    Sequence;
+  long    PaddingLength;
+  long    SendTime;
+  long    Duration;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+
+  PayloadParsingInformation(EntryFileClass ef, const String &thePluginName, ObserverInterface theObserver){
+    long startingPos = ef.GetPos();
+    _pluginName = thePluginName;
+    _observer = theObserver;
+
+    LengthTypeFlags = ef.ReadBinaryInt(1, false);
+    if(LengthTypeFlags & 0x1)
+      MultiplePayloadsPresent = true;
+    if(LengthTypeFlags & 0x2)
+      SequenceType = SequenceType + 1;
+    if(LengthTypeFlags & 0x4)
+      SequenceType = SequenceType + 2;
+    if(LengthTypeFlags & 0x8)
+      PaddingLengthType = PaddingLengthType + 1;
+    if(LengthTypeFlags & 0x10)
+      PaddingLengthType = PaddingLengthType + 2;
+    if(LengthTypeFlags & 0x20)
+      PacketLengthType = PacketLengthType + 1;
+    if(LengthTypeFlags & 0x40)
+      PacketLengthType = PacketLengthType + 2;
+    if(LengthTypeFlags & 0x80)
+      ErrorCorrectionPresent = true;
+
+    PropertyFlags = ef.ReadBinaryInt(1, false);
+
+    if(PropertyFlags & 0x1)
+      ReplicatedDataLengthType = ReplicatedDataLengthType + 1;
+    if(PropertyFlags & 0x2)
+      ReplicatedDataLengthType = ReplicatedDataLengthType + 2;
+    if(PropertyFlags & 0x4)
+      OffsetIntoMediaObjectLengthType = OffsetIntoMediaObjectLengthType + 1;
+    if(PropertyFlags & 0x8)
+      OffsetIntoMediaObjectLengthType = OffsetIntoMediaObjectLengthType + 2;
+    if(PropertyFlags & 0x10)
+      MediaObjectNumberLengthType = MediaObjectNumberLengthType + 1;
+    if(PropertyFlags & 0x20)
+      MediaObjectNumberLengthType = MediaObjectNumberLengthType + 2;
+    if(PropertyFlags & 0x40)
+      StreamNumberLengthType = StreamNumberLengthType + 1;
+    if(PropertyFlags & 0x80)
+      StreamNumberLengthType = StreamNumberLengthType + 2;
+
+
+   if(PacketLengthType == 0)
+      PacketLength = 0;
+    else if(PacketLengthType == 1)
+      PacketLength = ef.ReadBinaryInt(1, false);
+    else if(PacketLengthType == 2)
+      PacketLength = ef.ReadBinaryInt(2, false);
+    else if(PacketLengthType == 3)
+      PacketLength = ef.ReadBinaryInt(4, false);
+
+    if(SequenceType == 0)
+      Sequence = 0;
+    else if(SequenceType == 1)
+      Sequence = ef.ReadBinaryInt(1, false);
+    else if(SequenceType == 2)
+      Sequence = ef.ReadBinaryInt(2, false);
+    else if(SequenceType == 3)
+      Sequence = ef.ReadBinaryInt(4, false);
+
+    if(PaddingLengthType == 0)
+      PaddingLength = 0;
+    else if(PaddingLengthType == 1)
+      PaddingLength = ef.ReadBinaryInt(1, false);
+    else if(PaddingLengthType == 2)
+      PaddingLength = ef.ReadBinaryInt(2, false);
+    else if(PaddingLengthType == 3)
+      PaddingLength = ef.ReadBinaryInt(4, false);
+
+    SendTime = ef.ReadBinaryInt(4, false);
+    Duration = ef.ReadBinaryInt(2, false);
+
+    _observer.WriteDebug(_pluginName, "      PayloadParsingInformation, Offset " + startingPos, false);
+    _observer.WriteDebug(_pluginName, "        PacketLengthType = " + PacketLengthType, false);
+    _observer.WriteDebug(_pluginName, "        PacketLength = " + PacketLength, false);
+    _observer.WriteDebug(_pluginName, "        PaddingLength = " + PaddingLength, false);
+    _observer.WriteDebug(_pluginName, "        SendTime = " + SendTime, false);
+    _observer.WriteDebug(_pluginName, "        Duration = " + Duration + " milliseconds", false);
+  }
+}
+
+class PayloadData{
+  int  StreamNumber;
+  bool KeyFrameBit;
+  long MediaObjectNumber;
+  long OffsetIntoMediaObject;
+  long ReplicatedDataLength;
+  //long ReplicatedData;
+  long PayloadLength;
+  //long _PayloadData;
+  bool keepWorking;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  PayloadData(EntryFileClass ef, long payloadLengthType, PayloadParsingInformation ppi, const long &dataPacketSize, const long &packetStartOffset, const String &thePluginName, ObserverInterface theObserver){
+    //long startingPos = ef.GetPos();
+    keepWorking = true;
+    _pluginName = thePluginName;
+    _observer = theObserver;
+
+    StreamNumber = ef.ReadBinaryInt(1, false);
+
+    if(StreamNumber & 0x80){
+      KeyFrameBit = true;
+      StreamNumber = StreamNumber - 128;
+    }
+
+    if(ppi.MediaObjectNumberLengthType == 0)
+      MediaObjectNumber = 0;
+    else if(ppi.MediaObjectNumberLengthType == 1)
+      MediaObjectNumber = ef.ReadBinaryInt(1, false);
+    else if(ppi.MediaObjectNumberLengthType == 2)
+      MediaObjectNumber = ef.ReadBinaryInt(2, false);
+    else if(ppi.MediaObjectNumberLengthType == 3)
+      MediaObjectNumber = ef.ReadBinaryInt(4, false);
+
+   if(ppi.OffsetIntoMediaObjectLengthType == 0)
+      OffsetIntoMediaObject = 0;
+    else if(ppi.OffsetIntoMediaObjectLengthType == 1)
+      OffsetIntoMediaObject = ef.ReadBinaryInt(1, false);
+    else if(ppi.OffsetIntoMediaObjectLengthType == 2)
+      OffsetIntoMediaObject = ef.ReadBinaryInt(2, false);
+    else if(ppi.OffsetIntoMediaObjectLengthType == 3)
+      OffsetIntoMediaObject = ef.ReadBinaryInt(4, false);
+
+    if(ppi.ReplicatedDataLengthType == 0)
+      ReplicatedDataLength = 0;
+    else if(ppi.ReplicatedDataLengthType == 1)
+      ReplicatedDataLength = ef.ReadBinaryInt(1, false);
+    else if(ppi.ReplicatedDataLengthType == 2)
+      ReplicatedDataLength = ef.ReadBinaryInt(2, false);
+    else if(ppi.ReplicatedDataLengthType == 3)
+      ReplicatedDataLength = ef.ReadBinaryInt(4, false);
+
+    // skip over the replicated data
+    if(ReplicatedDataLength + ef.GetPos() > ef.GetSize()){
+      _observer.WriteDebug(_pluginName, "!!Replicated Data Length is larger than the rest of the file: " + ReplicatedDataLength, false);
+      keepWorking = false;
+    }
+    else {
+      ef.Skip(ReplicatedDataLength);
+
+      if(ef.GetPos() > ef.GetSize())
+      {
+        _observer.WriteDebug(_pluginName, "!!ReplicatedDataLength exceeds available data.  Invalid", false);
+        keepWorking = false;
+        return;
+      }
+
+
+      if(ReplicatedDataLength == 1){
+       _observer.WriteDebug(_pluginName, "          Payload is compressed.", false);
+      }
+
+      if(payloadLengthType == 0)
+        PayloadLength = 0;
+      else if(payloadLengthType == 1)
+        PayloadLength = ef.ReadBinaryInt(1, false);
+      else if(payloadLengthType == 2)
+        PayloadLength = ef.ReadBinaryInt(2, false);
+      else if(payloadLengthType == 3)
+        PayloadLength = ef.ReadBinaryInt(4, false);
+      else if(payloadLengthType == -1){
+        // this is set when the Packet has a single payload - it's a calculation
+        PayloadLength = dataPacketSize - (ef.GetPos() - packetStartOffset) - ppi.PaddingLength;
+      }
+
+      if(PayloadLength == 0){
+        _observer.WriteDebug(_pluginName, "!!Payload Length is ZERO.  Invalid", false);
+        keepWorking = false;
+      }
+      else {
+
+        // skip over the payload data
+        ef.Skip(PayloadLength);
+
+        if(ef.GetPos() > ef.GetSize())
+        {
+          _observer.WriteDebug(_pluginName, "!!Payload Length exceeds available data.  Invalid", false);
+          keepWorking = false;
+          return;
+        }
+
+        _observer.WriteDebug(_pluginName, "          Stream Number:       " + StreamNumber, false);
+        _observer.WriteDebug(_pluginName, "          Media Object Number: " + MediaObjectNumber, false);
+        _observer.WriteDebug(_pluginName, "          Is Key Frame:        " + KeyFrameBit, false);
+        if(payloadLengthType > -1)
+          _observer.WriteDebug(_pluginName, "          Payload Length:      " + PayloadLength, false);
+      }
+    }
+  }
+}
+
+
+typedef PayloadData[] PayloadDataArray;
+
+class ASF_Data_Packet{
+
+  ErrorCorrectionData       errorCorrectionData;
+  PayloadParsingInformation payloadParsingInformation;
+  PayloadDataArray          payloadDataArray;
+
+  bool keepWorking;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  ASF_Data_Packet(EntryFileClass ef, long dataPacketSize, const String &thePluginName, ObserverInterface theObserver){
+    payloadDataArray = new PayloadDataArray();
+    _pluginName = thePluginName;
+    _observer = theObserver;
+    keepWorking = true;
+    long offset = ef.GetPos();
+
+    // read the first byte of this packet.
+    // if bit 7 is flipped, then this byte belongs to error correction
+    // otherwise, it belongs to payload parsing
+
+    int checkByte = ef.ReadBinaryInt(1, false);
+    ef.Skip(-1);
+    if(checkByte & 0x80){
+      errorCorrectionData = new ErrorCorrectionData(ef, _pluginName, _observer);
+
+      if(errorCorrectionData.OpaqueDataPresent){
+        // no idea what to do here - it's no in the ASF specification
+        _observer.WriteDebug(_pluginName, "      Reportedly contains opaque data, which is a violation of the ASF Specification.", false);
+        keepWorking = false;
+      }
+    }
+
+    if(keepWorking){
+      payloadParsingInformation = new PayloadParsingInformation(ef, _pluginName, _observer);
+      if(payloadParsingInformation.MultiplePayloadsPresent){
+        // Read in the payload structure and then the actual payloads
+        int PayloadFlags;
+        int NumberOfPayloads;
+        int PayloadLengthType;
+
+        PayloadFlags = ef.ReadBinaryInt(1, false);
+        if(PayloadFlags & 0x1)
+          NumberOfPayloads = NumberOfPayloads + 1;
+        if(PayloadFlags & 0x2)
+          NumberOfPayloads = NumberOfPayloads + 2;
+        if(PayloadFlags & 0x4)
+          NumberOfPayloads = NumberOfPayloads + 4;
+        if(PayloadFlags & 0x8)
+          NumberOfPayloads = NumberOfPayloads + 8;
+        if(PayloadFlags & 0x10)
+          NumberOfPayloads = NumberOfPayloads + 16;
+        if(PayloadFlags & 0x20)
+          NumberOfPayloads = NumberOfPayloads + 32;
+        if(PayloadFlags & 0x40)
+          PayloadLengthType = PayloadLengthType + 1;
+        if(PayloadFlags & 0x80)
+          PayloadLengthType = PayloadLengthType + 2;
+
+        _observer.WriteDebug(_pluginName, "      Packet Has: " + NumberOfPayloads + " payloads", false);
+        _observer.WriteDebug(_pluginName, "      Payload Length Type: " + PayloadLengthType, false);
+
+
+        // Read in the payloads
+        for(int i = 0; i < NumberOfPayloads; i++){
+          _observer.WriteDebug(_pluginName, "        Payload(" + i + "), Offset " + ef.GetPos(), false);
+          PayloadData pd(ef, PayloadLengthType, payloadParsingInformation, dataPacketSize, offset, _pluginName, _observer);
+
+          keepWorking = pd.keepWorking;
+
+          if(!pd.keepWorking){
+            break;
+          }
+          else if(pd.StreamNumber == 0){
+            _observer.WriteDebug(_pluginName, "!!Payload Stream Number is invalid (ZERO)", false);
+            keepWorking = false;
+            break;
+          }
+          else
+            payloadDataArray.Add(pd);
+        }
+
+        if(keepWorking){
+          // Finally, read in the Padding Data
+          _observer.WriteDebug(_pluginName, "      Padding Length: " + payloadParsingInformation.PaddingLength, false);
+
+          ReadPadding(ef);
+        }
+      }
+      else {
+        _observer.WriteDebug(_pluginName, "      Packet Has a single Payload", false);
+        _observer.WriteDebug(_pluginName, "        Payload(0), Offset " + ef.GetPos(), false);
+
+        // Read in the single payload
+        PayloadData pd(ef, -1, payloadParsingInformation, dataPacketSize, offset, _pluginName, _observer);
+        keepWorking = pd.keepWorking;
+
+        if(pd.keepWorking){
+          if(pd.StreamNumber == 0){
+            _observer.WriteDebug(_pluginName, "!!Payload Stream Number is invalid (ZERO)", false);
+            keepWorking = false;
+          }
+          else {
+            payloadDataArray.Add(pd);
+
+            // Finally, read in the Padding Data
+            _observer.WriteDebug(_pluginName, "      Padding Length: " + payloadParsingInformation.PaddingLength, false);
+            ReadPadding(ef);
+          }
+        }
+      }
+    }
+  }
+
+  void ReadPadding(EntryFileClass ef){
+    // Read through the padding data and make sure they're all zeroes
+    for(int i = 0; i < payloadParsingInformation.PaddingLength; i++){
+      if(ef.GetPos() > ef.GetSize())
+      {
+        keepWorking = false;
+        break;
+      }
+      if(!ef.ReadBinaryInt(1, false) == 0x00){
+        _observer.WriteDebug(_pluginName, "Packet padding data is invalid.", false);
+        keepWorking = false;
+        break;
+      }
+    }
+    //ef.Skip(payloadParsingInformation.PaddingLength);
+  }
+}

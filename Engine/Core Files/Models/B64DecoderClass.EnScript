@@ -1,0 +1,232 @@
+include "..\\Interfaces\\ObserverInterface"
+
+class DecoderClass {
+
+  long               BinaryLength;
+
+  ObserverInterface _observer;
+
+
+  SearchClass        LineBreak;
+
+  String             CharacterSet;
+
+  typedef char[]     VariableArray;
+
+
+  DecoderClass(ObserverInterface theObserver):
+    _observer = theObserver
+  {
+    CharacterSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",
+
+    // Initialize the LineBreak Search
+    LineBreak = new SearchClass();
+    LineBreak.AddKeyword("\\x0D\\x0A", KeywordClass::GREP);
+    LineBreak.Create();
+  }
+
+
+
+  MemoryFileClass DecodeEntry(EntryClass entry, long offset){
+
+    // Initialize the variables
+    EntryFileClass   ef();
+    long             lastPos = offset;
+    long             lineLength;
+    long             maxLength;
+    MemoryFileClass  mf();
+    String           myLine;
+    String           tempVal;
+
+
+    _observer.WriteDebug("DecoderClass", "DecodeEntry called at offset: " + offset, true);
+
+    #ifdef VERSION_6
+      ef.Open(entry, FileClass::SLACK);
+    #else
+      ef.Open(entry, FileClass::SLACK | FileClass::NOINITIALIZE);
+    #endif
+
+    if(ef){
+      ef.SetCodePage(CodePageClass::ANSI);
+      ef.Seek(offset);
+
+      // MemoryFileClass doesn't like getting a lot of data - so cap it at 10MB
+      maxLength = ef.GetSize() - offset;
+      if(maxLength > 10000000) maxLength = 10000000;
+      _observer.WriteDebug("DecoderClass", "Opening " + maxLength + " bytes into MemoryFileClass", true);
+
+      // Open an empty MemoryFileClass - this will house the decoded data
+      if(mf.Open(maxLength, FileClass::WRITE)){
+        mf.SetCodePage(CodePageClass::ANSI);
+        mf.Seek(0);
+
+        // SEARCH the entry for Base64 line breaks
+        SystemClass::StatusRange("Searching for Base64 Line Breaks", maxLength );
+        LineBreak.Find(ef, maxLength, -1, SearchClass::STATUSUPDATE);
+        SearchClass::HitArrayClass lineBreaks = LineBreak.GetHits();
+        ef.Seek(offset);
+
+        _observer.WriteDebug("DecoderClass", "Search for Base64 line breaks yielded " + lineBreaks.Count() + " hits", true);
+
+
+        // Examine the data leading to each line break
+        bool cont = true;
+        long count = 1;
+
+        forall (SearchClass::HitClass lineBreak in lineBreaks) {
+          _observer.SetStatusMessage("Checking LineBreak #" + count);
+          lineLength = lineBreak.Offset() - lastPos;
+          ef.ReadString(tempVal, lineLength);
+
+          // if the sub-routine couldn't decode the whole line, then kill the process and set the file pointer there.
+          long goodChars = DecodeLine(tempVal, mf, count);
+          if(goodChars != lineLength){
+            cont = false;
+            ef.Skip(lineLength-goodChars);
+            lastPos = ef.GetPos();
+            BinaryLength = ef.GetPos() - offset;
+            _observer.WriteDebug("DecoderClass", "Failed to fully decode line #" + count, true);
+            break;
+          }
+          else {
+            // ...skip the line break marker and set up for next run
+            lastPos = ef.GetPos() + 2;
+            ef.Seek(lastPos);
+            BinaryLength = ef.GetPos() - offset;
+          }
+
+          count++;
+        }
+
+        // At this point, if there hasn't been a reason to kill the forall above...
+        // ...there may be a partial line following the last lineBreak
+        if(cont){
+          if(ef.GetPos() + lineLength > ef.GetSize())
+            lineLength = ef.GetSize() - ef.GetPos();
+          ef.ReadString(tempVal, lineLength);
+          if(!tempVal == "")
+            if(!DecodeLine(tempVal, mf, count) == tempVal.GetLength()){
+              BinaryLength = ef.GetPos() - offset;
+            }
+        }
+
+        _observer.WriteDebug("DecoderClass", "Binary Length identified as: " + BinaryLength, true);
+
+      }
+      else
+        _observer.WriteDebug("DecoderClass", "Attempt to read data into MemoryFileclass failed.", true);
+
+    } else {
+      _observer.WriteFullLine("Could not open entry: " + entry.FullPath());
+      _observer.WriteDebug("DecoderClass", "Could not open entry: " + entry.FullPath(), true);
+    }
+
+    if(BinaryLength < 0) BinaryLength = 0;
+    _observer.WriteDebug("DecoderClass", "", true);
+    return mf;
+  }
+
+
+
+
+
+  // Function to determine if the character supplied is a valid character for Base64
+  bool is_base64( char c) {
+    return (  ((c>='A')&&(c<='Z')) ||
+              ((c>='a')&&(c<='z')) ||
+              ((c>='0')&&(c<='9')) ||
+               (c == '+') ||
+               (c == '/') ||
+               (c == '=')
+            );
+  }
+
+
+
+
+  // Write to a text file the decoded line
+  int DecodeLine(const String &myLine, MemoryFileClass &outFile, long count) {
+
+    // Hold the before and after data in arrays
+    VariableArray encoded(4,4);
+    VariableArray decoded(3,3);
+
+    int myLineLength = myLine.GetLength();
+    int byteCount;
+    int myLinePos;
+
+    // for each character in the line...
+    for(myLinePos = 0; myLinePos < myLineLength; myLinePos++){
+      _observer.SetStatusMessage("Checking LineBreak #" + count + " char " + myLinePos + " / " + myLineLength);
+
+      char c = myLine[myLinePos];
+
+      // character must be a member of the base64 character set
+      if(! is_base64(c) ){
+        _observer.WriteDebug("DecoderClass", "xx Invalid Character for a Base64 Encoded File.", true);
+        return myLinePos+1;
+      }
+
+      // Don't add the character, add the place number this character has in the character set
+      int charPos = CharacterSet.Find(c, 0, -1, String::CASE);
+      encoded[byteCount] = charPos;
+
+      // increment the byte counter
+      byteCount++;
+
+      // if there are four bytes in the decoded array, then decode
+      if (byteCount == 4) {
+
+        // Break the 4-byte Base64 data to 3-byte Base10 data
+        if(  encoded[0] != 64 && encoded[1] != 64 ){
+          decoded[0] = ( encoded[0] << 2)        + ((encoded[1] & 0x30) >> 4);
+          outFile.WriteBinaryInt(long::Convert(String::FormatInt(decoded[0])), 1);
+        }
+
+        if(  encoded[1] != 64 && encoded[2] != 64 ){
+          decoded[1] = ((encoded[1] & 0xf) << 4) + ((encoded[2] & 0x3c) >> 2);
+          outFile.WriteBinaryInt(long::Convert(String::FormatInt(decoded[1])), 1);
+        }
+
+        if(  encoded[2] != 64 && encoded[3] != 64 ){
+          decoded[2] = ((encoded[2] & 0x3) << 6) +   encoded[3];
+          outFile.WriteBinaryInt(long::Convert(String::FormatInt(decoded[2])), 1);
+        }
+
+        /*  NOTE:  It seems as though an equal sign is used as a placeholder to complete a group of four encoded bytes.
+                   I've included the equal sign in the character set, so it will survive the validation
+                   but at the same time will be ignored at this stage.
+        */
+
+
+        byteCount = 0;
+      }
+    }
+
+    // if there are any remaining characters, then process this last batch
+    if(byteCount) {
+
+      // Padd the decoded array with null values to make it 4 bytes
+      for (int j = byteCount; j < 4; j++)
+        encoded[j] = 0;
+
+        if(  encoded[0] != 64 && encoded[1] != 64 ){
+          decoded[0] = ( encoded[0] << 2)        + ((encoded[1] & 0x30) >> 4);
+          outFile.WriteBinaryInt(long::Convert(String::FormatInt(decoded[0])), 1);
+        }
+
+        if(  encoded[1] != 64 && encoded[2] != 64 ){
+          decoded[1] = ((encoded[1] & 0xf) << 4) + ((encoded[2] & 0x3c) >> 2);
+          outFile.WriteBinaryInt(long::Convert(String::FormatInt(decoded[1])), 1);
+        }
+
+        if(  encoded[2] != 64 && encoded[3] != 64 ){
+          decoded[2] = ((encoded[2] & 0x3) << 6) +   encoded[3];
+          outFile.WriteBinaryInt(long::Convert(String::FormatInt(decoded[2])), 1);
+        }
+    }
+
+    return myLinePos;
+  }
+}

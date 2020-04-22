@@ -1,0 +1,5 @@
+class VictimClass {
+
+  String Country,
+         Series;
+}

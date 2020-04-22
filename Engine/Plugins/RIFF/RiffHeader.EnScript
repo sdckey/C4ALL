@@ -1,0 +1,14 @@
+class RiffHeader: RiffBaseClass{
+
+  RiffHeader(){
+  }
+
+  void Read(EntryFileClass ef, const long &offset, const String &padding){
+    RiffBaseClass::Read(ef, offset, padding);
+
+    // in a RiffHeader, we must have "RIFF" as the fileType
+    if(fileName != "RIFF"){
+      _isValid = false;
+    }
+  }
+}

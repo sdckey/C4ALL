@@ -1,0 +1,99 @@
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+class ASF_Extended_Content_Description_Object;
+
+class ContentDescriptors{
+  int     DescriptorNameLength;
+  String  DescriptorName;
+  int     DescriptorValueDataType;
+  int     DescriptorValueLength;
+  String  DescriptorValue;
+
+  ObserverInterface _observer;
+
+  ContentDescriptors(EntryFileClass ef, ObserverInterface theObserver){
+    _observer = theObserver;
+    DescriptorNameLength = ef.ReadBinaryInt(2, false);
+
+    long pos = ef.GetPos();
+    ef.SetCodePage(CodePageClass::UNICODE);
+    ef.ReadString(DescriptorName, DescriptorNameLength/2);
+    ef.SetCodePage(CodePageClass::ANSI);
+
+    ef.Seek(pos + DescriptorNameLength);
+    DescriptorValueDataType = ef.ReadBinaryInt(2, false);
+    DescriptorValueLength = ef.ReadBinaryInt(2, false);
+
+    pos = ef.GetPos();
+
+    if(DescriptorValueDataType == 0x0000){
+      ef.SetCodePage(CodePageClass::UNICODE);
+      ef.ReadString(DescriptorValue, DescriptorValueLength/2);
+    }
+    else{
+      ef.ReadString(DescriptorValue, DescriptorValueLength);
+    }
+
+
+    ef.SetCodePage(CodePageClass::ANSI);
+    ef.Seek(pos + DescriptorValueLength);
+  }
+}
+
+
+typedef ContentDescriptors[] ContentDescriptorsArray;
+
+class ASF_Extended_Content_Description_Object {
+
+  ulong  ObjectId1;
+  ulong  ObjectId2;
+  long   ObjectSize;
+  int    ContentDescriptorsCount;
+  ContentDescriptorsArray contentDescriptorsArray;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  ASF_Extended_Content_Description_Object(const String &thePluginName, ObserverInterface theObserver){
+    _pluginName = thePluginName;
+    _observer = theObserver;
+    contentDescriptorsArray = new ContentDescriptorsArray();
+  }
+
+
+  void Read(EntryFileClass ef, const long &offset){
+    ef.Seek(offset);
+
+    ObjectId1 = ef.ReadBinaryInt(8, true);
+    ObjectId2 = ef.ReadBinaryInt(8, true);
+    ObjectSize = ef.ReadBinaryInt(8, false);
+
+    if(offset + ObjectSize < ef.GetSize()){
+      ContentDescriptorsCount = ef.ReadBinaryInt(2, false);
+
+        _observer.WriteDebug(_pluginName, "   ASF_Extended_Content_Description_Object", false);
+        _observer.WriteDebug(_pluginName, "    =======================================", false);
+        _observer.WriteDebug(_pluginName, "      Offset: " + offset, false);
+        _observer.WriteDebug(_pluginName, "      Object Size: " + ObjectSize, false);
+        _observer.WriteDebug(_pluginName, "      Descriptors Count: " + ContentDescriptorsCount, false);
+
+      for(int i = 0; i < ContentDescriptorsCount; i++){
+        ContentDescriptors cd(ef, _observer);
+        contentDescriptorsArray.Add(cd);
+
+          _observer.WriteDebug(_pluginName, "        Content Descriptor(" + i + ")", false);
+          _observer.WriteDebug(_pluginName, "          Descriptor Name: " + cd.DescriptorName, false);
+          _observer.WriteDebug(_pluginName, "          Descriptor Value: " + cd.DescriptorValue, false);
+      }
+
+      _observer.WriteDebug(_pluginName, "", false);
+
+    }
+    else {
+      _observer.WriteDebug(_pluginName, "Not enough data to read the contents of this object.", false);
+    }
+
+    ef.Seek(offset + ObjectSize);
+  }
+
+}

@@ -1,0 +1,82 @@
+include "..\\..\\Core Files\\Interfaces\\ObserverInterface"
+include "WMF_RecordController"
+include "WMF_Record"
+include "META_HEADER"
+
+
+typedef WMF_Record[] RecordArray;
+
+class WmfBase {
+
+
+  ObserverInterface _observer;
+  RecordArray       _records;
+
+  WmfBase(ObserverInterface theObserver)
+  {
+    _observer = theObserver;
+    _records = new RecordArray();
+  }
+
+  void WriteDebug(const String &str){
+    _observer.WriteDebug("WmfBase", str, true);
+  }
+
+
+  long Validate(FileClass fc, long offset){
+    fc.Seek(offset);
+
+    WMF_RecordController controller(_observer);
+    META_HEADER header(_observer, fc);
+
+    bool valid = true;
+    long endOffset;
+
+    if(header.IsValid()){
+      bool keepReading = true;
+      WMF_Record record;
+
+      while(keepReading){
+        record = controller.ReadNextRecord(fc);
+        _records.Add(record);
+
+        // There are only two ways to exit this process:
+        // 1.  We hit the valid end of the file
+        // 2.  We run out of valid elements
+        if(record.IsValid){
+          if(record.RecordType == "META_EOF"){
+            endOffset = fc.GetPos();
+            keepReading = false;
+          }
+        }
+        else {
+          // For the moment, if any element fails, the whole picture is treated as invalid
+          // It's possible that there may be partial files that could be rendered...
+          valid = false;
+          keepReading = false;
+          endOffset = fc.GetPos();
+        }
+      }
+
+      // Now that we have processed all available records, check what we've got
+      // Must have more than just a Header and EOF record
+       if(_records.Count() <= 1){
+        WriteDebug("Validation passed, but data does not have any internal records.  Search Hit will be ignored.");
+        return -1;
+      }
+      if(valid){
+        long fileSize = fc.GetPos() - offset;
+        WriteDebug("Vaidation passed.  Identified File Size: " + fileSize);
+        return fileSize;
+      }
+      else {
+        WriteDebug("Validation failed.  Search Hit will be ignored");
+        return -1;
+      }
+    }
+    else {
+      WriteDebug("Invalid Header");
+      return -1;
+    }
+  }
+}

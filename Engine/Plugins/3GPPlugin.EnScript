@@ -1,0 +1,374 @@
+/*
+  version 1.0.1 -added "wide" as a valid boxType, as encountered in landscape movies taken by the iPhone
+                -altered maxSize determination to handle deleted files (where Logical is actually greater than Physical)
+          1.0.2 -added "uuid" as a valid boxType
+*/
+
+
+include "..\\Core Files\\Interfaces\\MoviePluginInterface"
+
+class 3GPPlugin;
+
+class 3GPDialog: DialogClass{
+
+  CheckBoxClass    chkEnabled;
+  StaticTextClass  txtInfo;
+  LongEditClass    lngMin;
+  LongEditClass    lngMax;
+  StaticTextClass  txtAuthor;
+  CheckBoxClass    chkM4a;
+
+
+  3GPDialog(DialogClass parent, 3GPPlugin gp):
+    DialogClass      (parent, "3GP Settings:"),
+      chkEnabled     (this, "Search for 3GP Files",
+                                        10,  10, 100, 12, 0, gp._enabled),
+      txtInfo        (this, "3GP is a common movie format found in mobile technology.",
+                                        10,  25, 220, 50, 0),
+      chkM4a         (this, "Extract M4A files as well (uses same format structure as 3gp)",
+                                        10,  40, 100, 12, 0, gp._extractM4a),
+      lngMin         (this, "Minimum allowed 3GP size (in bytes). (0 - 1,000,000)",
+                                        10,  85, 100, 12, 0, gp._3gpMin, 0, 1000000, WindowClass::REQUIRED),
+      lngMax         (this, "Maximum allowed 3GP size (in bytes). (10,000,000 - 10,000,000,000)",
+                                        10, 120, 100, 12, 0, gp._3gpMax, 10000000, 10000000000, WindowClass::REQUIRED),
+      txtAuthor      (this, "Plugin developed by:\r\n" +
+                            "\r\n" +
+                            "Trevor Fairchild\r\n" +
+                            "Electronic Crime Section\r\n" +
+                            "Ontario Provincial Police\r\n" +
+                            "C4P@e-crime.on.ca",
+                                        175, 175, 100, 50, 0)
+  {
+  }
+}
+
+class 3GPPlugin:MoviePluginInterface{
+
+  3GPDialog   _dlg;
+
+  bool        _enabled;
+  bool        _extractM4a;
+  bool        isM4a;
+
+  double      _movieLength;
+
+  int         _headerIndex;
+
+  long        _3gpMax;
+  long        _3gpMin;
+  long        _rangeToIgnoreSearchHits;
+
+  String      _extension;
+  String      _header;
+  String      _metaData;
+  String      _pluginName;
+  String      _version;
+
+  3GPPlugin()
+  {
+    _pluginName = "C4M Plugin - 3GP";
+    _enabled = true;
+    _extension = "3GP";
+    _header = "ftyp"; // \\x66\\x74\\x79\\x70";  //4byte length marker, then the "ftyp" marker
+    _metaData = "";
+    _3gpMin = 0;
+    _3gpMax = 10000000000;
+    _extractM4a = false;
+    _loadSettings();
+
+    _version = "1.0.2";
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("3gpEnabled", _enabled);
+    myStorage.Value("3gpMin", _3gpMin);
+    myStorage.Value("3gpMax", _3gpMax);
+    myStorage.Value("m4aEnabled", _extractM4a);
+  }
+
+
+  void CheckMoov(EntryFileClass ef){
+    // marker should be at the length value of the sub-box
+    long    size;
+    long    largeSize;
+    String  type;
+    int     version;
+    long    flags;
+
+    long creation_time;
+    long modification_time;
+    long timescale;
+    long duration;
+
+    // Read in the size and type of this box
+    size = ef.ReadBinaryInt(4);
+    ef.ReadString(type, 4);
+
+
+    if(type == "mvhd"){
+      if(size == 1)
+        largeSize = ef.ReadBinaryInt(8);
+
+      version = ef.ReadBinaryInt(1);
+      flags = ef.ReadBinaryInt(3, FileClass::BIGENDIAN);
+
+      if(version == 1){
+        creation_time = ef.ReadBinaryInt(8, FileClass::BIGENDIAN);
+        modification_time = ef.ReadBinaryInt(8, FileClass::BIGENDIAN);
+        timescale = ef.ReadBinaryInt(4, FileClass::BIGENDIAN);
+        duration = ef.ReadBinaryInt(8, FileClass::BIGENDIAN);
+
+      } else {  // version == 0
+        creation_time = ef.ReadBinaryInt(4, FileClass::BIGENDIAN);
+        modification_time = ef.ReadBinaryInt(4, FileClass::BIGENDIAN);
+        timescale = ef.ReadBinaryInt(4, FileClass::BIGENDIAN);
+        duration = ef.ReadBinaryInt(4, FileClass::BIGENDIAN);
+
+      }
+
+      if(timescale > 0)
+        _movieLength = duration / timescale;
+      else
+      	_movieLength = 0;
+    }
+  }
+
+
+
+  long _validate(EntryClass e, long offset){
+    isM4a = false;
+    _movieLength = -1;
+    _metaData = "";
+
+    // Open the Entry and jump to the search hit location
+    EntryFileClass ef();
+
+    #ifdef VERSION_6
+      ef.Open(e, FileClass::SLACK);
+    #else
+      ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
+    #endif
+
+    ef.SetCodePage(CodePageClass::ANSI);
+    ef.Seek(offset);
+
+    // Specify the largest possible size this 3GP could be, based on the available data
+    long maxSize = _3gpMax;
+    long upperSize = e.PhysicalSize();
+
+    // Deleted files will show a larger LogicalSize, so watch for that
+    if(e.LogicalSize() > e.PhysicalSize()) upperSize = e.LogicalSize();
+
+    // Limit the file accordingly
+    if(maxSize > upperSize)
+      maxSize = upperSize;
+
+
+
+
+    // There are three main parts of a 3GP, the File Type Box (ftyp), the Movie Box (
+    bool hasFtyp;
+    bool hasMoov;
+    bool hasMdat;
+
+    long boxLength;
+    String boxType;
+    bool cont = true;
+
+    while(cont){
+      // Check the box
+      boxLength = ef.ReadBinaryInt(4, true);
+      ef.ReadString(boxType, 4);
+
+      WriteDebug(_pluginName, "Potential Box Identified:", false);
+      WriteDebug(_pluginName, "  => Type "   + boxType, false);
+      WriteDebug(_pluginName, "  => Offset " + (ef.GetPos() - 8), false);
+      WriteDebug(_pluginName, "  => Length " + boxLength, false);
+
+      // these are the known 'legal' box types
+      if(boxType == "ftyp" || boxType == "pdin" ||
+         boxType == "moov" || boxType == "moof" ||
+         boxType == "mfra" || boxType == "mdat" ||
+         boxType == "free" || boxType == "skip" ||
+         boxType == "meta" || boxType == "meco" ||
+         boxType == "wide" || boxType == "uuid")
+      {
+        if(boxType == "mdat" && boxLength <3 && offset == 0) {
+          // It seems there are some valid videos with invalid size markers for mdat.
+          // IF this is a live file, then treat the mdat as valid and set the size to the end of the logical file
+          hasMdat = true;
+          boxLength = ef.GetSize() - ef.GetPos()+8;
+          ef.Skip(boxLength - 8);
+          cont = false;
+        }
+        else if(boxLength < 3){
+          WriteDebug(_pluginName, "Box Length less than three.  Exiting while loop", false);
+          cont = false;
+        }
+        else {
+
+          // cancel this loop if the estimated size of the next box exceeds the size of the Entry
+          if(boxType == "ftyp"){
+            // Check to see what type of file this is
+            String fileType;
+            ef.ReadString(fileType, 4);
+            ef.Skip(-4);
+            if(fileType == "M4A ")
+              isM4a = true;
+
+            hasFtyp = true;
+          }
+          else if(boxType == "moov"){
+            hasMoov = true;
+
+            // Explore the moov box for data about this movie
+            long curPos = ef.GetPos();
+            CheckMoov(ef);
+            ef.Seek(curPos);
+          }
+          else if(boxType == "mdat"){
+            hasMdat = true;
+          }
+
+          if(boxLength + ef.GetPos() - 8 > ef.GetSize())
+            cont = false;
+
+          // Jump to the start of the next box
+          if(cont)
+            ef.Skip(boxLength - 8);
+
+          // Make sure that where we are isn't over the maximum size of the file format
+          if(ef.GetPos() > offset + maxSize)
+              cont = false;
+
+          // Make sure there are at least 8 more bytes to search
+          if(ef.GetPos() + 8 >= ef.GetSize()){
+            cont = false;
+          }
+    /*
+          // If we have all three boxes, then stop the search.
+          if(hasFtyp && hasMoov && hasMdat)
+            cont = false;
+    */
+        }
+      } else
+      {
+        cont = false;
+      }
+    }
+
+
+    if(hasFtyp && hasMoov && hasMdat){
+
+      long carveSize = ef.GetPos() - offset;
+      WriteDebug(_pluginName, "3GP Search Hit validated.  Size set as: " + carveSize, false);
+
+      if(carveSize > maxSize){
+        carveSize = maxSize;
+        WriteDebug(_pluginName, "  => size exceeds format maximum of " + maxSize + ".  Size has been truncated to comply", false);
+      }
+
+
+      if(carveSize < _3gpMin){
+        WriteDebug(_pluginName, "  => size is under the minimum format size.  File ignored.", false);
+        //_rangeToIgnoreSearchHits = carveSize;
+        _rangeToIgnoreSearchHits = 0;
+        return 0;
+      }
+
+      if(isM4a &! _extractM4a){
+        WriteDebug(_pluginName, " => 3gp validated an audio file (m4a) but is not extracting such files.  File ignored.", false);
+        _rangeToIgnoreSearchHits = carveSize;
+        return -carveSize;
+      }
+
+      _rangeToIgnoreSearchHits = carveSize;
+      return carveSize;
+
+    } else {
+      WriteDebug(_pluginName, "3GP Search Hit was missing one or more key elements: hasFtyp = " + hasFtyp + ", hasMoov = " + hasMoov + ", hasMdat = " + hasMdat, false);
+      _rangeToIgnoreSearchHits = 0;
+      return 0;
+
+    }
+  }
+
+
+  // ==============================================
+  // Interface methods
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return null;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+  virtual String MetaData(){
+    return _metaData;
+  }
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new 3GPDialog(parent, this);
+    return _dlg;
+  }
+  virtual long Validate(EntryClass e, long offset){
+    offset -= BytesPrecedingHeader();
+    if(offset < 0){
+      WriteDebug(_pluginName, "Search hit - BytesPrecedingHeader puts the target offset before the start of the file.  Search Hit is invalid.", false);
+      return -1;
+    }
+    else
+      return _validate(e, offset);
+  }
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual double MovieLength(){
+    return _movieLength;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 4;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+
+  virtual long SmallFileLimit(){
+    return 30720;  // 30kb
+  }
+  // ==============================================
+}

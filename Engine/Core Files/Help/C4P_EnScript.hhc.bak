@@ -1,0 +1,36 @@
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">
+<HTML>
+<HEAD>
+<!-- Sitemap 1.0 -->
+</HEAD><BODY>
+<UL>
+     <LI><OBJECT type="text/sitemap">
+         <param name="Name" value="Introduction">
+         <param name="Local" value="Introduction.htm">
+          </OBJECT>
+     <LI><OBJECT type="text/sitemap">
+         <param name="Name" value="Main Settings Page:">
+         <param name="Local" value="Main_Settings_Page_.htm">
+          </OBJECT>
+     <LI><OBJECT type="text/sitemap">
+         <param name="Name" value="Case Report Values">
+         <param name="Local" value="Case_Report_Values.htm">
+          </OBJECT>
+     <LI><OBJECT type="text/sitemap">
+         <param name="Name" value="Resume Settings">
+         <param name="Local" value="Resume_Settings.htm">
+          </OBJECT>
+     <LI><OBJECT type="text/sitemap">
+         <param name="Name" value="Advanced Options">
+         <param name="Local" value="Advanced_Options.htm">
+          </OBJECT>
+     <LI><OBJECT type="text/sitemap">
+         <param name="Name" value="Mounting Options">
+         <param name="Local" value="Mounting_Options.htm">
+          </OBJECT>
+     <LI><OBJECT type="text/sitemap">
+         <param name="Name" value="File Format Options">
+         <param name="Local" value="File_Format_Options.htm">
+          </OBJECT>
+</UL>
+</BODY></HTML>

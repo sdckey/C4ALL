@@ -1,0 +1,281 @@
+include "..\\..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+include "ASF_File_Properties_Object"
+include "ASF_Stream_Properties_Object"
+include "ASF_Header_Extension_Object"
+include "ASF_Codec_List_Object"
+include "ASF_Script_Command_Object"
+include "ASF_Marker_Object"
+include "ASF_Bitrate_Mutual_Exclusion_Object"
+include "ASF_Error_Correction_Object"
+include "ASF_Content_Description_Object"
+include "ASF_Extended_Content_Description_Object"
+include "ASF_Stream_Bitrate_Properties_Object"
+include "ASF_Content_Branding_Object"
+include "ASF_Content_Encryption_Object"
+include "ASF_Extended_Content_Encryption_Object"
+include "ASF_Digital_Signature_Object"
+include "ASF_Padding_Object"
+include "Unknown_Object"
+
+class ASF_Header_Object{
+
+  // Validation variables
+  bool   HeaderFieldsAreValid;
+  bool   HeaderObjectsAreValid;
+
+  // Header Object values
+  ulong  ObjectId1;
+  ulong  ObjectId2;
+  long   ObjectSize;
+  long   NumberOfHeaderObjects;
+  int    Reserved1;
+  int    Reserved2;
+
+  String            _pluginName;
+  ObserverInterface _observer;
+
+  // Header Objects
+  ASF_File_Properties_Object               FilePropertiesObject;
+  ASF_Stream_Properties_Object             StreamPropertiesObject;
+  ASF_Header_Extension_Object              HeaderExtensionObject;
+  ASF_Codec_List_Object                    CodecListObject;
+  ASF_Script_Command_Object                ScriptCommandObject;
+  ASF_Marker_Object                        MarkerObject;
+  ASF_Bitrate_Mutual_Exclusion_Object      BitrateMutualExclusionObject;
+  ASF_Error_Correction_Object              ErrorCorrectionObject;
+  ASF_Content_Description_Object           ContentDescriptionObject;
+  ASF_Extended_Content_Description_Object  ExtendedContentDescription;
+  ASF_Stream_Bitrate_Properties_Object     StreamBitratePropertiesObject;
+  ASF_Content_Branding_Object              ContentBrandingObject;
+  ASF_Content_Encryption_Object            ContentEncryptionObject;
+  ASF_Extended_Content_Encryption_Object   ExtendedContentEncryptionObject;
+  ASF_Digital_Signature_Object             DigitalSignatureObject;
+  ASF_Padding_Object                       PaddingObject;
+  Unknown_Object                           UnknownObject;
+
+  ASF_Header_Object(const String &thePluginName, ObserverInterface theObserver){
+    _pluginName = thePluginName;
+    _observer = theObserver;
+
+    // initialize the object id values of the header object elements
+    ASF_File_Properties_Object1              = 0xA1DCAB8C47A9CF11;
+    ASF_Stream_Properties_Object1            = 0x9107DCB7B7A9CF11;
+    ASF_Header_Extension_Object1             = 0xB503BF5F2EA9CF11;
+    ASF_Codec_List_Object1                   = 0x4052D1861D31D011;
+    ASF_Script_Command_Object1               = 0x301AFB1E620BD011;
+    ASF_Marker_Object1                       = 0x01CD87F451A9CF11;
+    ASF_Bitrate_Mutual_Exclusion_Object1     = 0xDC29E2D6DA35D111;
+    ASF_Error_Correction_Object1             = 0x3526B2758E66CF11;
+    ASF_Content_Description_Object1          = 0x3326B2758E66CF11;
+    ASF_Extended_Content_Description_Object1 = 0x40A4D0D207E3D211;
+    ASF_Content_Branding_Object1             = 0xFAB3112223BDD211;
+    ASF_Stream_Bitrate_Properties_Object1    = 0xCE75F87B8D46D111;
+    ASF_Content_Encryption_Object1           = 0xFBB3112223BDD211;
+    ASF_Extended_Content_Encryption_Object1  = 0x14E68A292226174C;
+    ASF_Digital_Signature_Object1            = 0xFCB3112223BDD211;
+    ASF_Padding_Object1                      = 0x74D40618DFCA0945;
+
+  }
+
+  void Read(EntryFileClass ef, const long &offset){
+    ef.Seek(offset);
+
+    ObjectId1 = ef.ReadBinaryInt(8, true);
+    ObjectId2 = ef.ReadBinaryInt(8, true);
+
+    ObjectSize = ef.ReadBinaryInt(8, false);
+    NumberOfHeaderObjects = ef.ReadBinaryInt(4, false);
+    Reserved1 = ef.ReadBinaryInt(1, false);
+    Reserved2 = ef.ReadBinaryInt(1, false);
+
+    HeaderFieldsAreValid = isValid();
+    HeaderObjectsAreValid = false;
+
+    if(HeaderFieldsAreValid){
+      _observer.WriteDebug(_pluginName, "  ASF_Header_Object", false);
+      _observer.WriteDebug(_pluginName, "  =================", false);
+      _observer.WriteDebug(_pluginName, "    Offset: " + offset, false);
+      _observer.WriteDebug(_pluginName, "    Object Size: " + ObjectSize, false);
+      _observer.WriteDebug(_pluginName, "    Number of Header Objects: " + NumberOfHeaderObjects, false);
+      _observer.WriteDebug(_pluginName, "  ", false);
+
+      int HeaderObjectsEncountered;
+
+      while(ef.GetPos() - offset < ObjectSize && HeaderObjectsEncountered <= NumberOfHeaderObjects){
+        // read the next GUID to decide what sub object to send for processing
+        long pos = ef.GetPos();
+        ulong objId1 = ef.ReadBinaryInt(8, true);
+        ef.Seek(pos);
+
+        if(objId1 == ASF_File_Properties_Object1){
+          FilePropertiesObject = new ASF_File_Properties_Object(_pluginName, _observer);
+          FilePropertiesObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Stream_Properties_Object1){
+          if(!StreamPropertiesObject) StreamPropertiesObject = new ASF_Stream_Properties_Object(_pluginName, _observer);
+          StreamPropertiesObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Header_Extension_Object1){
+          HeaderExtensionObject = new ASF_Header_Extension_Object(_pluginName, _observer);
+          HeaderExtensionObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Codec_List_Object1){
+          CodecListObject = new ASF_Codec_List_Object(_pluginName, _observer);
+          CodecListObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Script_Command_Object1){
+          ScriptCommandObject = new ASF_Script_Command_Object(_pluginName, _observer);
+          ScriptCommandObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Marker_Object1){
+          MarkerObject = new ASF_Marker_Object(_pluginName, _observer);
+          MarkerObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Bitrate_Mutual_Exclusion_Object1){
+          BitrateMutualExclusionObject = new ASF_Bitrate_Mutual_Exclusion_Object(_pluginName, _observer);
+          BitrateMutualExclusionObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Error_Correction_Object1){
+          ErrorCorrectionObject = new ASF_Error_Correction_Object(_pluginName, _observer);
+          ErrorCorrectionObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Content_Description_Object1){
+          ContentDescriptionObject = new ASF_Content_Description_Object(_pluginName, _observer);
+          ContentDescriptionObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Extended_Content_Description_Object1){
+          ExtendedContentDescription = new ASF_Extended_Content_Description_Object(_pluginName, _observer);
+          ExtendedContentDescription.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Stream_Bitrate_Properties_Object1){
+          StreamBitratePropertiesObject = new ASF_Stream_Bitrate_Properties_Object(_pluginName, _observer);
+          StreamBitratePropertiesObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Content_Branding_Object1){
+          ContentBrandingObject = new ASF_Content_Branding_Object(_pluginName, _observer);
+          ContentBrandingObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Content_Encryption_Object1){
+          ContentEncryptionObject = new ASF_Content_Encryption_Object(_pluginName, _observer);
+          ContentEncryptionObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Extended_Content_Encryption_Object1){
+          ExtendedContentEncryptionObject = new ASF_Extended_Content_Encryption_Object(_pluginName, _observer);
+          ExtendedContentEncryptionObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Digital_Signature_Object1){
+          DigitalSignatureObject = new ASF_Digital_Signature_Object(_pluginName, _observer);
+          DigitalSignatureObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+        else if(objId1 == ASF_Padding_Object1){
+          PaddingObject = new ASF_Padding_Object(_pluginName, _observer);
+          PaddingObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+
+         else {
+          _observer.WriteDebug(_pluginName, "Unknown Object Id: " + objId1, false);
+          UnknownObject = new Unknown_Object(_pluginName, _observer);
+          UnknownObject.Read(ef, ef.GetPos());
+          HeaderObjectsEncountered = HeaderObjectsEncountered + 1;
+        }
+      }
+
+      if(HeaderObjectsEncountered < NumberOfHeaderObjects){
+        _observer.WriteDebug(_pluginName, "!!The Header Object expected " + NumberOfHeaderObjects + " but we could only find " + HeaderObjectsEncountered, false);
+        HeaderObjectsAreValid = false;
+      }
+      else if(offset + ObjectSize != ef.GetPos()){
+        _observer.WriteDebug(_pluginName, "!!The Header Object is supposed to be " + ObjectSize + " but it is " + (ef.GetPos() - offset), false);
+        HeaderObjectsAreValid = false;
+      }
+      else if(!FilePropertiesObject){
+        _observer.WriteDebug(_pluginName, "!!No File Properties Object in the header.  Invalid file", false);
+        HeaderObjectsAreValid = false;
+      }
+      else if(!StreamPropertiesObject){
+        _observer.WriteDebug(_pluginName, "!!No Stream Properties Object in the header.  Invalid file", false);
+        HeaderObjectsAreValid = false;
+      }
+      else if(!HeaderExtensionObject){
+        _observer.WriteDebug(_pluginName, "!!No Header Extension Object in the header.  Invalid file", false);
+        HeaderObjectsAreValid = false;
+      }
+      else
+        HeaderObjectsAreValid = true;
+    }
+  }
+
+  // Returns TRUE if the Header values are valid
+  bool isValid(){
+    bool isValid = true;
+    if(ObjectId1 != 0x3026B2758E66CF11)
+      isValid = false;
+    if(ObjectId2 != 0xA6D900AA0062CE6C)
+      isValid = false;
+    if(Reserved1 != 0x01)
+      isValid = false;
+    if(Reserved2 != 0x02)
+      isValid = false;
+
+    return isValid;
+  }
+
+  // Returns TRUE if the Header Object contains all mandatory elements
+  bool HeaderObjectIsValid(){
+    bool isValid = true;
+
+    return isValid;
+  }
+
+
+
+  ulong ASF_File_Properties_Object1;
+  ulong ASF_Stream_Properties_Object1;
+  ulong ASF_Header_Extension_Object1;
+  ulong ASF_Codec_List_Object1;
+  ulong ASF_Script_Command_Object1;
+  ulong ASF_Marker_Object1;
+  ulong ASF_Bitrate_Mutual_Exclusion_Object1;
+  ulong ASF_Error_Correction_Object1;
+  ulong ASF_Content_Description_Object1;
+  ulong ASF_Extended_Content_Description_Object1;
+  ulong ASF_Stream_Bitrate_Properties_Object1;
+  ulong ASF_Content_Branding_Object1;
+  ulong ASF_Content_Encryption_Object1;
+  ulong ASF_Extended_Content_Encryption_Object1;
+  ulong ASF_Digital_Signature_Object1;
+  ulong ASF_Padding_Object1;
+
+}

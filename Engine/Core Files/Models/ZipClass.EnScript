@@ -1,0 +1,140 @@
+//include "..\\Controllers\\PictureOutputController"
+include "..\\Controllers\\MovieOutputController"
+include "..\\..\\Classes\\OptionsClass"
+
+/*
+  This will identify whether a file is an apparent ZIP volume, based on header information.
+  Current File Signature Analysis has the logic that if the file begins as:  x50//x4B
+  then it is a "Match" for Zip Archive Volume.
+
+  This Validator will return the following values:
+
+  -1 = NOT a Zip
+   0 = ZIP volume, standard
+   1 = ZIP volume, but length of 22 bytes, meaning it is an empty volume
+   2 = ZIP volume, but password protected / encrypted - meaning EnCase can't open it.
+   3 = UNKNOWN file tag
+*/
+
+class ZipClass {
+
+  PictureOutputController   MyPictureOutput;
+  MovieOutputController     MyMovieOutput;
+  String                    Header;
+  OptionsClass              MyOptions;
+
+  bool                      HadHeader;
+
+  ZipClass(OptionsClass myOptions, PictureOutputController myPictureOutput, MovieOutputController myMovieOutput):
+    MyOptions = myOptions,
+    MyPictureOutput = myPictureOutput,
+    MyMovieOutput = myMovieOutput
+  {
+    Header = "";
+  }
+
+  long Validate(EntryClass entry){
+    if(MyOptions.Debug){
+      MyPictureOutput.WriteDebug("ZipClass", "============================");
+      MyPictureOutput.WriteDebug("ZipClass", "== ValidateArchive called on " + entry.FullPath());
+
+      MyMovieOutput.WriteDebug("ZipClass", "============================");
+      MyMovieOutput.WriteDebug("ZipClass", "== ValidateArchive called on " + entry.FullPath());
+    }
+
+    long             myReturn = -1;
+    EntryFileClass   file();
+
+    if(entry.LogicalSize() < 3){
+      // must be more than 3 bytes to be a zip...
+      if(MyOptions.Debug) {
+        MyPictureOutput.WriteDebug("ZipClass", "\\/\\/ Logical Size is less than 3.  Process aborted.");
+        MyMovieOutput.WriteDebug("ZipClass", "\\/\\/ Logical Size is less than 3.  Process aborted.");
+      }
+      myReturn = -1;
+
+    } else {
+      if(MyOptions.Debug){
+        MyPictureOutput.WriteDebug("ZipClass", "== Opening Entry for examination...");
+        MyMovieOutput.WriteDebug("ZipClass", "== Opening Entry for examination...");
+      }
+
+      #ifdef VERSION_6
+        file.Open(entry, FileClass::SLACK);
+      #else
+        file.Open(entry, FileClass::SLACK | FileClass::NOINITIALIZE);
+      #endif
+
+      if(file){
+        if(MyOptions.Debug) {
+          MyPictureOutput.WriteDebug("ZipClass", "success");
+          MyMovieOutput.WriteDebug("ZipClass", "success");
+        }
+
+        // Check the first two bytes to validate the header
+        String s;
+        file.SetCodePage(CodePageClass::ANSI);
+        file.ReadString(s, 2);
+
+        HadHeader = false;
+        if(s == "PK"){
+          HadHeader = true;
+
+          // the header matches...
+          if(entry.LogicalSize() <= 22){
+
+            // ...but it's an empty file
+            if(MyOptions.Debug) {
+              MyPictureOutput.WriteDebug("ZipClass", "\\/\\/ Valid Zip Header, but too small to hold data.  Process aborted.");
+              MyMovieOutput.WriteDebug("ZipClass", "\\/\\/ Valid Zip Header, but too small to hold data.  Process aborted.");
+            }
+
+            myReturn = 1;
+
+          } else {
+            //skip the next 4 bytes
+            file.Skip(4);
+
+            //read in next byte
+            int i = file.ReadBinaryInt(1, true);
+
+            if(i == 0 || i == 2 || i == 8 ) {
+              // These values represent acceptable, mountable archives
+              if(MyOptions.Debug) {
+                MyPictureOutput.WriteDebug("ZipClass", "== Valid Zip Header and mount flag");
+                MyMovieOutput.WriteDebug("ZipClass", "== Valid Zip Header and mount flag");
+              }
+
+              myReturn = 0;
+
+            } else if(i == 1 || i == 3 || i == 9 || i == 10 || i == 20 ) {
+              // These values represent password-protected or otherwise volatile archives
+              if(MyOptions.Debug) {
+                MyPictureOutput.WriteDebug("ZipClass", "== Valid Zip Header, but cannot be mounted by EnCase.");
+                MyMovieOutput.WriteDebug("ZipClass", "== Valid Zip Header, but cannot be mounted by EnCase.");
+              }
+
+              myReturn = 2;
+
+            } else {
+              // Anything else is an unknown..
+              if(MyOptions.Debug) {
+                MyPictureOutput.WriteDebug("ZipClass", "== Valid Zip Header, but unknown mount flag value - unsure of action to take.");
+                MyMovieOutput.WriteDebug("ZipClass", "== Valid Zip Header, but unknown mount flag value - unsure of action to take.");
+              }
+
+              myReturn = 3;
+            }
+          }
+        }
+      } else {
+        if(MyOptions.Debug) {
+          MyPictureOutput.WriteDebug("ZipClass", "failed!");
+          MyMovieOutput.WriteDebug("ZipClass", "failed!");
+        }
+      }
+    }
+
+    return myReturn;
+  }
+}

@@ -1,0 +1,397 @@
+include "..\\Core Files\\Interfaces\\ObserverInterface"
+
+// This Library has been created separately simply to maintain
+// some sanity in the code.  There is a lot of data to deal with
+// when parsing the EXIF/IPTC markers
+class ExifClass{
+
+  // Observer is going to be the main script - this is how the plugins can communicate back "up" the chain
+  ObserverInterface _observer;
+
+  bool              EndianType;
+  long              TiffHeader,
+                    LastAt;
+
+  ExifClass(ObserverInterface observer):
+    _observer = observer
+  {
+  }
+
+  void CheckPhotoshopIptc(FileClass &ef){
+    int lastPos = ef.GetPos();
+
+    _observer.WriteDebug("ExifClass", "== Evaluating Photoshop JPEG IPTC Data (offset " + ef.GetPos() + ")", true);
+
+    // Skip the APP13 and Size Marker
+    ef.Skip(2);
+
+    // Next 13 bytes should be Photoshop header
+    String header = "Photoshop 3.0";
+    String s;
+    ef.ReadString(s, 13);
+
+
+    if(header != s){
+      _observer.WriteDebug("ExifClass", "No match to Photoshop Header: " + s, true);
+
+    } else {
+      // skip next byte, 8BIM marker, Type, Padding, Size
+      ef.Skip(1+4+2+4);
+
+      int    fullSize = ef.GetPos() + ef.ReadBinaryInt(2, true);
+
+      int    segMarker,
+             segType,
+             segSize;
+      String segValue,
+             segName;
+
+
+      while(ef.GetPos() <= fullSize){
+        segMarker = ef.ReadBinaryInt(2, true);
+        segType   = ef.ReadBinaryInt(1, true);
+        segSize   = ef.ReadBinaryInt(2, true);
+        ef.ReadString(segValue, segSize);
+
+        segName = "Unknown Type";
+        if(segType == 120)
+          segName = "Caption";
+        else if (segType == 105)
+          segName = "Headline";
+        else if (segType == 110)
+          segName = "Credits";
+        else if (segType == 5)
+          segName = "Object Name";
+        else if (segType == 103)
+          segName = "Original Transmission Reference";
+        else if (segType == 25)
+          segName = "Keywords";
+        else if (segType == 116)
+          segName = "Copyright";
+
+
+        _observer.WriteDebug("ExifClass", "  Next Segment:", true);
+        _observer.WriteDebug("ExifClass", "   - segMarker = " + segMarker, true);
+        _observer.WriteDebug("ExifClass", "   - segType   = " + segName + " (" + segType + ")", true);
+        _observer.WriteDebug("ExifClass", "   - segSize   = " + segSize, true);
+        _observer.WriteDebug("ExifClass", "   - segValue  = " + segValue + "\n", true);
+      }
+    }
+
+    // Go back to the beginning, as if nothing happened
+    ef.Seek(lastPos);
+  }
+
+  String CheckTag(FileClass ef){
+
+    // Read in the Tag Attributes
+    long   TagNumber = ef.ReadBinaryInt(2, EndianType);
+
+    // don't need TagFormat, but still need to skp two bytes...
+    long   TagFormat;
+    TagFormat = ef.ReadBinaryInt(2, EndianType);
+
+    long   TagLength = ef.ReadBinaryInt(4, EndianType);
+    long   TagOffset = ef.ReadBinaryInt(4, EndianType) + TiffHeader;
+
+
+    // Kill any ridiculous length values
+    if(TagLength > 1000000)
+      TagLength = 4;
+
+    String TagName, TagValue;
+
+    // ****************************************************************************
+    // ****  Tags used by IFD0 (actual image) *************************************
+    // ****************************************************************************
+
+    // Image Description
+    if(TagNumber == 0x10E){
+      TagName = "ImageDescription";
+      TagValue = ReturnString(ef, TagOffset, TagLength);
+    }
+
+    // Make
+    else if (TagNumber == 0x010F){
+      TagName = "Make";
+      TagValue = ReturnString(ef, TagOffset, TagLength);
+    }
+
+    // Model
+    else if (TagNumber == 0x0110){
+      TagName = "Model";
+      TagValue = ReturnString(ef, TagOffset, TagLength);
+    }
+/*
+    // Orientation
+    else if (TagNumber == 0x0112){
+      TagName = "Orientation";
+
+      int i = ReturnInt(ef, TagOffset, TagLength);
+      if(i == 1)
+        TagValue = "Top Left";
+      else if(i == 2)
+        TagValue = "Top Right";
+      else if(i == 3)
+        TagValue = "Bottom Right";
+      else if(i == 4)
+        TagValue = "Bottom Left";
+      else if(i == 5)
+        TagValue = "Left Top";
+      else if(i == 6)
+        TagValue = "Right Top";
+      else if(i == 7)
+        TagValue = "Right Bottom";
+      else if(i == 8)
+        TagValue = "Left Bottom";
+    }
+
+    // XResolution
+    else if (TagNumber == 0x011A){
+      TagName = "XResolution";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // YResolution
+    else if (TagNumber == 0x011B){
+      TagName = "YResolution";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // ResolutionUnit
+    else if (TagNumber == 0x0128){
+      TagName = "ResolutionUnit";
+      TagValue = "Unknown Value";
+
+      int i = ReturnInt(ef, TagOffset, TagLength);
+      if(i == 1) TagValue = "Inch";
+      if(i == 2) TagValue = "Centimeter";
+    }
+*/
+    // Software
+    else if (TagNumber == 0x0131){
+      TagName = "Software";
+      TagValue = ReturnString(ef, TagOffset, TagLength);
+    }
+
+    // DateTime
+    else if (TagNumber == 0x0132){
+      TagName = "DateTime";
+      TagValue = ReturnString(ef, TagOffset, TagLength);
+    }
+/*
+    // WhitePoint
+    else if (TagNumber == 0x013E){
+      TagName = "WhitePoint";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // PrimaryChromaticities
+    else if (TagNumber == 0x013F){
+      TagName = "PrimaryChromaticities";
+      TagValue = ReturnString(ef, TagOffset, TagLength);
+    }
+
+    // YCbCrCoefficients
+    else if (TagNumber == 0x0211){
+      TagName = "YCbCrCoefficients";
+      TagValue = ReturnString(ef, TagOffset, TagLength);
+    }
+
+    // YCbCrPositioning
+    else if (TagNumber == 0x0213){
+      TagName = "YCbCrPositioning";
+      TagValue = ReturnString(ef, TagOffset, TagLength);
+    }
+
+    // ReferenceBlackWhite
+    else if (TagNumber == 0x0214){
+      TagName = "ReferenceBlackWhite";
+      TagValue = ReturnString(ef, TagOffset, TagLength);
+    }
+
+    // Copyright
+    else if (TagNumber == 0x8298){
+      TagName = "Copyright";
+      TagValue = ReturnString(ef, TagOffset, TagLength);
+    }
+
+    // ExifOffset - the actual offset, plus this value, from the TiffHeader position
+    else if (TagNumber == 0x8769){
+      TagName = "ExifOffset";
+      TagValue = TagOffset + ReturnLong(ef, TagOffset, TagLength) - TiffHeader;
+    }
+
+
+    // ****************************************************************************
+    // ****  Tags used by IFD1 (Thumbnail Image)  *********************************
+    // ****************************************************************************
+
+    // ImageWidth
+    else if(TagNumber == 0x100){
+      TagName = "ImageWidth";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // ImageLength
+    else if (TagNumber == 0x0101){
+      TagName = "ImageLength";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // BitsPerSample
+    else if (TagNumber == 0x0102){
+      TagName = "BitsPerSample";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // Compression
+    else if (TagNumber == 0x0103){
+      TagName = "Compression";
+      int i = ReturnInt(ef, TagOffset, TagLength);
+      TagValue = i + " (Unknown Value)";
+      if(i == 1) TagValue = "1 (No Compression)";
+      if(i == 6) TagValue = "6 (JPG)";
+    }
+
+    // PhotometricInterpretation
+    else if (TagNumber == 0x0106){
+      TagName = "PhotometricInterpretation";
+      int i = ReturnInt(ef, TagOffset, TagLength);
+      TagValue = "Unknown Value";
+      if(i == 1) TagValue = "Monochrome";
+      if(i == 2) TagValue = "RGB";
+      if(i == 3) TagValue = "YCbCr";
+    }
+
+    // StripOffsets
+    else if (TagNumber == 0x0111){
+      TagName = "StripOffsets";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // SamplesPerPixel
+    else if (TagNumber == 0x0115){
+      TagName = "SamplesPerPixel";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // RowsPerStrip
+    else if (TagNumber == 0x0116){
+      TagName = "RowsPerStrip";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // StripByteConunts
+    else if (TagNumber == 0x0117){
+      TagName = "StripByteConunts";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // XResolution
+    else if (TagNumber == 0x011A){
+      TagName = "XResolution";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // YResolution
+    else if (TagNumber == 0x011B){
+      TagName = "YResolution";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // PlanarConfiguration
+    else if (TagNumber == 0x011C){
+      TagName = "PlanarConfiguration";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // ResolutionUnit
+    else if (TagNumber == 0x0128){
+      TagName = "ResolutionUnit";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // JpegIFOffset
+    else if (TagNumber == 0x0201){
+      TagName = "JpegIFOffset";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // JpegIFByteCount
+    else if (TagNumber == 0x0202){
+      TagName = "JpegIFByteCount";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // YCbCrCoefficients
+    else if (TagNumber == 0x0211){
+      TagName = "YCbCrCoefficients";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // YCbCrSubSampling
+    else if (TagNumber == 0x0212){
+      TagName = "YCbCrSubSampling";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // YCbCrPositioning
+    else if (TagNumber == 0x0213){
+      TagName = "YCbCrPositioning";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+    // ReferenceBlackWhite
+    else if (TagNumber == 0x0214){
+      TagName = "ReferenceBlackWhite";
+      TagValue = ReturnInt(ef, TagOffset, TagLength);
+    }
+
+*/
+    else {
+      TagName = "**Unknown TagName**";
+      TagValue = "**Unknown TagValue**";
+    }
+
+    _observer.WriteDebug("ExifClass", "       - Tag       " + TagName + " (" + TagNumber + ")", true);
+    _observer.WriteDebug("ExifClass", "       - TagOffset " + TagOffset + " bytes", true);
+    _observer.WriteDebug("ExifClass", "       - TagLength " + TagLength + " bytes", true);
+    _observer.WriteDebug("ExifClass", "       - TagValue  " + TagValue + "\n", true);
+
+
+    LastAt = ef.GetPos();
+
+    if(TagName == "**Unknown TagName**")
+      return "";
+    else
+      return TagName + ": " + TagValue + ".    ";
+  }
+
+  String ReturnString(FileClass ef, long offset, long length){
+    String s;
+    ef.Seek(offset);
+    ef.ReadString(s, length);
+    return s;
+  }
+
+
+
+  int ReturnInt(FileClass ef, long offset, long length){
+    int i;
+    if(length >=4)
+      ef.Seek(offset);
+    i = ef.ReadBinaryInt(length, EndianType);
+    return i;
+  }
+
+
+
+  long ReturnLong(FileClass ef, long offset, long length){
+    long l;
+    if(length >=4)
+      ef.Seek(offset);
+    l = ef.ReadBinaryInt(length, EndianType);
+    return l;
+  }
+}

@@ -1,0 +1,23 @@
+include "..\\ActivePlugins"
+include "..\\Classes\\OptionsClass"
+include "..\\Core Files\\Controllers\\HelpController"
+
+include "ExcludeDialog"
+include "ReportDialog"
+include "TriageValidateSettings"
+
+class TriageValidateDialog : DialogClass {
+
+  TriageValidateSettings dlgValidate;
+  ReportDialog    dlgReport;
+  ExcludeDialog   dlgExclude;
+
+
+  TriageValidateDialog(OptionsClass myOptions, HelpController myHelp, ActivePlugins myActivePlugins) :
+    DialogClass    (null, "C4All Triage: Validation and Extraction"),
+      dlgValidate    (this, myOptions, myHelp, myActivePlugins),
+      dlgReport      (this, myOptions, myHelp),
+      dlgExclude     (this, myOptions, myHelp)
+  {
+  }
+}

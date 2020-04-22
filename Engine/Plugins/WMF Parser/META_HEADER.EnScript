@@ -1,0 +1,61 @@
+include "..\\..\\Core Files\\Interfaces\\ObserverInterface"
+
+class META_HEADER {
+    // 2.3.2.1 META_HEADER Record
+    // - the first record in a standard WMF metafile
+    int Type;
+    int HeaderSize;
+    int Version;
+    int SizeLow;
+    int SizeHigh;
+    int NumberOfObjects;
+    int MaxRecord;
+    int NumberOfMembers;
+
+    ObserverInterface _observer;
+
+    void WriteDebug(const String &val){
+      _observer.WriteDebug("WMF_Plugin\\META_HEADER", val, true);
+    }
+
+    // Note that values are in big endian - the comments below are shown as such
+    META_HEADER(ObserverInterface theObserver, FileClass fc){
+      _observer = theObserver;
+
+      Type = fc.ReadBinaryInt(2, 0);          // either 0x0001 or 0x0003
+      HeaderSize = fc.ReadBinaryInt(2, 0);    // must be 0x0009
+      Version = fc.ReadBinaryInt(2, 0);       // must be 0x0100 or 0x0300
+      SizeLow = fc.ReadBinaryInt(2, 0);
+      SizeHigh = fc.ReadBinaryInt(2, 0);
+      NumberOfObjects = fc.ReadBinaryInt(2, 0);
+      MaxRecord = fc.ReadBinaryInt(4, 0);     // this identifies the longest record in this file
+      NumberOfMembers = fc.ReadBinaryInt(2,0);
+
+      WriteDebug("");
+      WriteDebug("  META_HEADER");
+      WriteDebug("  ============");
+      WriteDebug("  Type: " + Type);
+      WriteDebug("  HeaderSize: " + HeaderSize);
+      WriteDebug("  Version: " + Version);
+      WriteDebug("  SizeLow: " + SizeLow);
+      WriteDebug("  SizeHigh: " + SizeHigh );
+      WriteDebug("  Number of Objects: " + NumberOfObjects);
+      WriteDebug("  Max Record: " + MaxRecord );
+      WriteDebug("  Number of Members: " + NumberOfMembers );
+      WriteDebug("");
+
+    }
+
+    bool IsValid(){
+      if(Type != 1 && Type != 3)
+        return false;
+
+      if(HeaderSize != 9)
+        return false;
+
+      if(Version != 0x0100 && Version != 0x0300)
+        return false;
+
+      return true;
+    }
+}

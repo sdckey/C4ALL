@@ -1,0 +1,8 @@
+include "PluginInterface"
+
+class MoviePluginInterface: PluginInterface{
+
+  // Attributes specific to Movie Formats
+  pure double MovieLength();
+
+}

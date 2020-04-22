@@ -1,0 +1,114 @@
+include "..\\Interfaces\\ObserverInterface"
+
+class RtfDecoderClass{
+
+  ObserverInterface  _observer;
+
+
+  RtfDecoderClass(ObserverInterface theObserver){
+    _observer = theObserver;
+  }
+
+  void WriteDebug(const String &val){
+    _observer.WriteDebug("RtfDecoderClass", val, true);
+  }
+
+
+  MemoryFileClass ConvertRtfData(EntryFileClass ef, long offset, long maxSize){
+
+    WriteDebug("Decoder called on possible WMF data");
+    ef.Seek(offset);
+
+    // reset the maximum size based on the amount of available data
+    if( (maxSize + offset) > ef.GetSize()) {
+      maxSize = ef.GetSize() - offset;
+      WriteDebug("Maximum size to search set to " + maxSize + " based on available data");
+    }
+
+    // This approach is specific to embedded WMF files.  Search for the encoded EOF marker
+    _observer.AppendStatusRange("Prepping RTF data", maxSize);
+    SearchClass footer();
+    footer.AddKeyword("\\x30\\x33\\x30\\x30\\x30\\x30\\x30\\x30\\x30\\x30\\x30\\x30", KeywordClass::ANSI|KeywordClass::GREP);
+    footer.Create();
+
+    long result = footer.Find(ef, maxSize, -1, SearchClass::STATUSUPDATE);
+    WriteDebug("Search for WMF encoded footer yielded " + result + " hits.");
+
+    _observer.RestoreStatusMessage();
+
+    if (result > 0){
+      SearchClass::HitArrayClass hits = footer.GetHits();
+
+      // research shows that there could be multiple EOF signatures
+      // but they might be nested within other records.
+      // Look for them all, and take the last one as "the One"
+      forall(SearchClass::HitClass h in hits){
+        maxSize = h.Offset() - offset + h.Length();
+      }
+      WriteDebug("Decode size set to " + maxSize + " based on the footer offset");
+
+      MemoryFileClass mf();
+      mf.Open(maxSize / 2, FileClass::WRITE);
+
+      _observer.AppendStatusRange("Decoding RTF data", maxSize);
+      ef.Seek(offset);
+
+      String val;
+      String temp;
+
+      while(ef.GetPos() < (maxSize + offset) ){
+
+        // Read in 2-byte pairs and convert them to binary (provided they aren't line returns)
+        ef.ReadString(val, 2);
+        if(val != "\r\n"){
+          temp = val + temp;
+
+          // Each byte MUST be an ascii numeric character
+          val.ToUpper();
+          if(val < "00" || val > "FF"){
+            WriteDebug("Invalid data found in stream.  Truncating data at this point (" + ef.GetPos() + ")");
+            temp = "";
+            break;
+          }
+        }
+
+        // Write to the MemoryFileClass 6 bytes at a time
+        if(temp.GetLength() == 6){
+          int bin = int::Convert(temp, int::HEX);
+          mf.WriteBinaryInt(bin, 3);
+
+          // Update the Status bar and clear the temporary holder
+          SystemClass::StatusInc(6);
+          temp = "";
+        }
+
+        SystemClass::StatusInc(2);
+      }
+
+      // Write out any remaining data at the conclusion of the loop
+      if(temp != ""){
+        int bin = int::Convert(temp, int::HEX);
+        mf.WriteBinaryInt(bin, (temp.GetLength() / 2));
+        SystemClass::StatusInc((temp.GetLength() / 2));
+        temp = "";
+      }
+
+      ef.Close();
+
+      // Now validate this as a possible picture
+      mf.Seek(0);
+
+      WriteDebug("Decoding complete.  " + mf.GetSize() + " bytes in decoded memory file.");
+      _observer.RestoreStatusMessage();
+      return mf;
+    }
+    else {
+      // How to handle this?  For the moment we'll treat it as an invalid file??
+      WriteDebug("File did not contain the expected footer.  Treating encoded data as invalid for C4All purposes.");
+      _observer.RestoreStatusMessage();
+      return null;
+    }
+  }
+}
+
+

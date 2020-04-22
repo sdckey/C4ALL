@@ -1,0 +1,18 @@
+include "..\\..\\ActivePlugins"
+
+class PluginListClass: NameListClass {
+  property String     PluginName;
+  property String     Extension;
+  property PluginList Represents;
+  property String     Version;
+
+  PluginListClass(PluginListClass parent, bool enabled, const String &name, const String &ext, PluginList p, const String &version):
+    NameListClass(parent, ext),
+    PluginName = name,
+    Extension = ext,
+    Represents = p,
+    Version = version
+  {
+    SetSelected(enabled);
+  }
+}

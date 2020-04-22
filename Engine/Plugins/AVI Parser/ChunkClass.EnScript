@@ -1,0 +1,96 @@
+include "AviMainHeader"
+
+class ChunkClass{
+  String ckId;
+  long   ckSize;
+  String ckDataString;
+
+  bool   _isValid;
+  String MetaData;
+  long   MovieLength;
+
+  bool IsValid(){
+    return _isValid;
+  }
+
+  void ReadMetaDataString(EntryFileClass ef){
+    long pos = ef.GetPos();
+    ef.ReadString(ckDataString, ckSize);
+    ef.Seek(pos + ckSize);
+
+    // remove any carriage returns
+    ckDataString.Trim(0x0A, String::TRIMALL, 0);
+
+    // also trim out trailing spaces
+    while(ckDataString.LastChar() == 0x20 && ckDataString.GetLength() > 2){
+      ckDataString = ckDataString.SubString(0, ckDataString.GetLength()-2);
+    }
+
+
+    if(!ckDataString == "")
+      MetaData = MetaData + ckId + ": " + ckDataString + "; \t";
+  }
+
+  void Read(EntryFileClass ef, long offset){
+    _isValid = true;
+    ef.Seek(offset);
+    ef.SetCodePage(CodePageClass::ANSI);
+
+    // read the chunk id
+    long pos = ef.GetPos();
+    ef.ReadString(ckId, 4);
+    ef.Seek(pos + 4);
+
+    if(ckId == "")
+      _isValid = false;
+    else {
+
+      // read the chunk size
+      ckSize = ef.ReadBinaryInt(4, false);
+
+      if(ckId == "IDIT"){
+        // No idea, but it has data in it that won't show in players...
+        ReadMetaDataString(ef);
+      }
+      else if(ckId == "ISFT"){
+        // No idea, but it has data in it
+        ReadMetaDataString(ef);
+      }
+      else if(ckId == "strd"){
+        // Stream Header Data Chunk
+        ReadMetaDataString(ef);
+      }
+      else if(ckId == "avih"){
+        AviMainHeader avih();
+        avih.dwMicroSecPerFrame = ef.ReadBinaryInt(4, false);
+        avih.dwMaxBytesPerSec = ef.ReadBinaryInt(4, false);
+        avih.dwPaddingGranularity = ef.ReadBinaryInt(4, false);
+        avih.dwFlags = ef.ReadBinaryInt(4, false);
+        avih.dwTotalFrames = ef.ReadBinaryInt(4, false);
+        avih.dwInitialFrames = ef.ReadBinaryInt(4, false);
+        avih.dwStream = ef.ReadBinaryInt(4, false);
+        avih.dwSuggestedBufferSize = ef.ReadBinaryInt(4, false);
+        avih.dwWidth = ef.ReadBinaryInt(4, false);
+        avih.dwHeight = ef.ReadBinaryInt(4, false);
+        ef.Skip(16);
+
+        MovieLength = avih.dwMicroSecPerFrame * avih.dwTotalFrames / 1000000 ;
+/*
+        Console.WriteLine(padding + "  AVI Main Header: (offset " + pos + ")");
+        Console.WriteLine(padding + "  ==================================");
+        Console.WriteLine(padding + "    fcc:                " + avih.fcc);
+        Console.WriteLine(padding + "    cb:                 " + avih.cb);
+        Console.WriteLine(padding + "    dwMicroSecPerFrame: " + avih.dwMicroSecPerFrame);
+        Console.WriteLine(padding + "    dwTotalFrames:      " + avih.dwTotalFrames);
+        Console.WriteLine(padding + "    dwStream:           " + avih.dwStream);
+        Console.WriteLine(padding + "    dwWidth:            " + avih.dwWidth);
+        Console.WriteLine(padding + "    dwHeight:           " + avih.dwHeight);
+        Console.WriteLine(padding + "    ");
+*/
+      }
+      else {
+        ef.Skip(ckSize);
+      }
+    }
+  }
+}

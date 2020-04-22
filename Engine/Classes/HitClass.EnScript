@@ -1,0 +1,9 @@
+class HitClass
+{
+  long   EntryId;
+  String DeviceName;
+  String FullPath;
+  ulong  PhysicalSector;
+  ulong  Offset;
+  String PluginName;
+}

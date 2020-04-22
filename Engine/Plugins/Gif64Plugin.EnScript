@@ -1,0 +1,197 @@
+include "..\\Core Files\\Interfaces\\PicturePluginInterface"
+include "..\\Core Files\\Models\\B64DecoderClass"
+include "GifBase"
+
+
+class Gif64Plugin;
+
+
+// Dialog Class exposing variables specific to this format
+class Gif64Dialog: DialogClass {
+
+  CheckBoxClass   chkGIF;
+  LongEditClass   lngGIF;
+  StaticTextClass txtGIF;
+  StaticTextClass  txtAuthor;
+
+  Gif64Dialog(DialogClass parent, Gif64Plugin gif) :
+    DialogClass    (parent, "GIF Settings (Base64):"),
+      chkGIF       (this, "Search for Base64 GIFs", 10, 10, 100, 12, 0, gif._enabled),
+      lngGIF       (this, "Maximum allowed GIF size (bytes: 0 - 100,000,000)", 10, 115, 100, 12, 0,
+                                                gif._gifMax, 0, 100000000, WindowClass::REQUIRED),
+      txtGIF       (this, "All GIF Files will be exported based on either the termination point of the image, or the " +
+                   "point at which valid GIF data ceases.", 10,  25,  220,  50, 0),
+      txtAuthor      (this, "Plugin developed by:\r\n" +
+                            "\r\n" +
+                            "Trevor Fairchild\r\n" +
+                            "Electronic Crime Section\r\n" +
+                            "Ontario Provincial Police\r\n" +
+                            "C4P@e-crime.on.ca",
+                                        175, 175, 100, 50, 0)
+  {
+  }
+}
+
+
+// Actual Format class, which implements the PicturePluginInterface
+class Gif64Plugin:PicturePluginInterface{
+
+
+  Gif64Dialog         _dlg;
+
+  bool              _enabled;
+
+  double            _aspectRatio;
+  double            _bitDepth;
+
+  int               _headerIndex;
+
+  long              _gifMax;
+  long              _gifMin;
+  long              _rangeToIgnoreSearchHits;
+
+  MemoryFileClass   _mf;
+
+  String            _extension;
+  String            _header;
+  String            _metaData;
+  String            _pluginName;
+  String            _version;
+
+
+  // Plugin's Constructor, where the base values are set and any readable values
+  //   are loaded from the Storage file
+  Gif64Plugin()
+  {
+    _pluginName = "C4P Plugin - Base64 GIF";
+    _enabled = true;
+    _extension = "GIF";
+    _header = "\\x52\\x30\\x6C\\x47\\x4F\\x44[\\x6C\\x64]\\x68";
+    _metaData = "";
+    _loadSettings();
+    _gifMin = 0;
+    _gifMax = 20000000;
+    _loadSettings();
+
+    _version = "1.0.2";
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("gif64Enabled", _enabled);
+    myStorage.Value("gif64Min", _gifMin);
+    myStorage.Value("gif64Max", _gifMax);
+  }
+
+  long _validate(EntryClass e, long offset){
+    // Create a temp file to store the decoded data
+    DecoderClass b64(_observer);
+
+    _mf = new MemoryFileClass();
+    _mf = b64.DecodeEntry(e, offset);
+    _mf.Seek(0);
+
+    long val;
+
+    if(_mf.GetSize() > 0){
+      GifBase gb(_observer);
+      gb._gifMin = _gifMin;
+      gb._gifMax = _gifMax;
+
+      val = gb._validate(_mf, offset);
+      _aspectRatio = gb._aspectRatio;
+      _bitDepth = gb._bitDepth;
+      _metaData = gb._metaData;
+    }
+
+    _rangeToIgnoreSearchHits = val;
+    return val;
+  }
+
+
+  // =======================================================================================
+  // Interface Functions that MUST be present and SHOULD tie in with the rest of your script
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return _mf;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+
+  virtual String MetaData(){
+    return _metaData;
+  }
+
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new Gif64Dialog(parent, this);
+    return _dlg;
+  }
+
+  virtual long Validate(EntryClass e, long offset){
+    return _validate(e, offset);
+  }
+
+  virtual double AspectRatio(){
+    return _aspectRatio;
+  }
+
+  virtual double BitDepth(){
+    return _bitDepth;
+  }
+
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 10240;  // 10kb
+  }
+  // =======================================================================================
+}
+
+
+

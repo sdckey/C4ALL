@@ -1,0 +1,22 @@
+include "WMV Parser"
+
+class MainClass {
+  void Main(CaseClass c) {
+    SystemClass::ClearConsole();
+
+
+    forall(EntryClass e in c.EntryRoot()){
+      if(e.IsSelected()){
+        Console.Write("Searching..." + e.FullPath() + "...");
+        WmvClass wmv();
+        long fileSize = wmv.Validate(e, 61404880896);
+        if(fileSize == 0)
+          Console.WriteLine("FAIL");
+        else
+          Console.WriteLine("PASS: " + fileSize + " bytes");
+
+        //break;
+      }
+    }
+  }
+}
