@@ -4,20 +4,41 @@ include "ISO Base Media Format Library\\SK_ISOBaseMediaLib.EnScript"
 class HEICPlugin;
 
 // Dialog Class exposing variables specific to this format
-class HEICDialog: DialogClass {
-
-  CheckBoxClass   chkHEIC;
+class HEICDialog: DialogClass
+{
+  HEICPlugin       HEIC;
+  CheckBoxClass    chkHEIC;
+  StringEditClass  strValidBoxes;
+  UIntEditClass    uintMaxSizeToExtractInMB;
   StaticTextClass  txtAuthor;
 
   HEICDialog(DialogClass parent, HEICPlugin heic) :
     DialogClass    (parent, "HEIC Settings:"),
-      chkHEIC      (this, "Search for HEICs", 10, 10, 100, 12, 0, heic._enabled),
-      txtAuthor      (this, "Plugin developed by:\n"
-                            "\n"
-                            "Simon Key\n"
-                            "skey@opentext.com",
-                                        175, 175, 100, 50, 0)
+    HEIC = heic,
+    chkHEIC(this, "Search for HEICs", START, START, DEFAULT, DEFAULT, 0, heic._enabled),
+    strValidBoxes(this, "Comma-delimited list of valid box codes", START, NEXT, 250, DEFAULT, 0, heic._validBoxes, -1, REQUIRED),
+    uintMaxSizeToExtractInMB(this, "Maximum size of file to extract (MB)", START, NEXT, 50, DEFAULT, 0,  heic._maxSizeToExtractInMB, 1, 0x7fffffff, REQUIRED),
+    txtAuthor(this, "Plugin developed by:\n"
+                    "\n"
+                    "Simon Key\n"
+                    "skey@opentext.com",
+                    175, 175, 100, 50, 0)
   {
+  }
+
+  virtual bool CanClose()
+  {
+    bool retval = super::CanClose();
+    if (retval)
+    {
+      String current_list = strValidBoxes.GetText();
+      retval = HEIC._buildBoxList(current_list);
+      if (!retval)
+      {
+        ErrorMessage("List of valid box codes must contain four or more entries including ftyp, moov, mdat, meta.");
+      }
+    }
+    return retval;
   }
 }
 
@@ -35,7 +56,10 @@ class HEICPlugin:PicturePluginInterface{
 
   int               _headerIndex;
 
+  uint              _maxSizeToExtractInMB;
+
   long              _rangeToIgnoreSearchHits;
+  long              _maxSizeToExtract;
 
   String            _extension;
   String            _header;
@@ -49,20 +73,22 @@ class HEICPlugin:PicturePluginInterface{
 
 
   // Plugin's Constructor, where the base values are set and any readable values
-  //   are loaded from the Storage file
+  // are loaded from the Storage file
   HEICPlugin() :
+    _validBoxes("beam,free,ftyp,mdat,meco,meta,moof,moov,mfra,pdin,pfrt,sidx,skip,ssix,styp,uuid,wide"),
     _validBoxesList(),
-    _requiredBoxesList()
+    _requiredBoxesList(),
+    _maxSizeToExtractInMB = 10240,
+    _pluginName("C4P Plugin - HEIC"),
+    _enabled = true,
+    _extension("HEIC"),
+    _header("....ftypheic"),
+    _version("1.0.0")
   {
-    _pluginName = "C4P Plugin - HEIC";
-    _enabled = true;
-    _extension = "HEIC";
-    _header = "....ftypheic";
-    _metaData = "";
-    _loadSettings();
-    _version = "1.0.0";
-    _validBoxes = "beam,free,ftyp,mdat,meco,meta,moof,moov,mfra,pdin,pfrt,sidx,skip,ssix,styp,uuid,wide";
     _requiredBoxesList.Parse("ftyp,moov,mdat,meta", ",");
+    _maxSizeToExtract = _maxSizeToExtractInMB * 1024 * 1024 * 1024;
+    _loadSettings();
+    _buildBoxList(_validBoxes);
   }
 
   bool _buildBoxList(const String &current_list)
@@ -80,13 +106,14 @@ class HEICPlugin:PicturePluginInterface{
         new NameListClass(_validBoxesList, t);
       }
     }
+    Console.WriteLine("Valid box count: {0}", _validBoxesList.Count());
     return _gotRequiredBoxTypes();
   }
 
   bool _gotRequiredBoxTypes()
   {
     bool retval;
-    if (_validBoxesList.Count() > _requiredBoxesList.Count())
+    if (_validBoxesList.Count() >= _requiredBoxesList.Count())
     {
       retval = true;
       foreach (NameListClass required in _requiredBoxesList)
@@ -108,11 +135,12 @@ class HEICPlugin:PicturePluginInterface{
 
   void _settings(StorageClass myStorage){
     myStorage.Value("heicEnabled", _enabled);
+    myStorage.Value("heicValidBoxes", _validBoxes);
+    myStorage.Value("heicMaxSizeToExtractInMB", _maxSizeToExtractInMB);
   }
 
   long _validate(EntryClass e, long offset)
   {
-
     long retval;
 
     // Reset the classwide variables
@@ -124,7 +152,12 @@ class HEICPlugin:PicturePluginInterface{
 
     if(ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE))
     {
-      ef.Seek(offset);
+      HEICBoxFileClass heic_box(e, ef, offset, _validBoxesList);
+      String error_message;
+      if (heic_box.Read(_maxSizeToExtract, error_message))
+      {
+        retval = heic_box.Size;
+      }
     }
     return retval;
   }
@@ -134,6 +167,7 @@ class HEICPlugin:PicturePluginInterface{
 
   // =======================================================================================
   // Interface Functions that MUST be present and SHOULD tie in with the rest of your script
+
   virtual String Version(){
     return _version;
   }
