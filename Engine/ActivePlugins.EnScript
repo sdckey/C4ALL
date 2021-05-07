@@ -21,6 +21,7 @@ include "Plugins\\EmfPlugin"
 include "Plugins\\FlvPlugin"
 include "Plugins\\GifPlugin"
 include "Plugins\\Gif64Plugin"
+include "Plugins\\HEICPlugin"
 include "Plugins\\Jp2Plugin"
 include "Plugins\\JpgPlugin"
 include "Plugins\\Jpg64Plugin"
@@ -51,6 +52,7 @@ class ActivePlugins{
   FlvPlugin   flvPlugin;
   GifPlugin   gifPlugin;
   Gif64Plugin gif64Plugin;
+  HEICPlugin  heicPlugin;
   Jp2Plugin   jp2Plugin;
   JpgPlugin   jpgPlugin;
   Jpg64Plugin jpg64Plugin;
@@ -100,6 +102,9 @@ class ActivePlugins{
 
     gif64Plugin = new Gif64Plugin();
     new PluginList(myPlugins, gif64Plugin);
+
+    heicPlugin = new HEICPlugin();
+    new PluginList(myPlugins, heicPlugin);
 
     jp2Plugin = new Jp2Plugin();
     new PluginList(myPlugins, jp2Plugin);

@@ -1,0 +1,261 @@
+class BoxClass : NameListClass
+{
+  ulong                                                    _Offset;
+
+  uint                                                     _Size;
+
+  ulong                                                    _LargeSize;
+
+  BoxClass(BoxClass parent = null, const String &name = "", uint options = 0) :
+    super(parent, name, options)
+  {
+
+  }
+
+  ulong FinalSize()
+  {
+    return _LargeSize ? _LargeSize : _Size;
+  }
+
+  bool Read(FileClass f, NameListClass valid_types)
+  {
+    _Offset = f.GetPos();
+    _Size = f.ReadBinaryInt(4, BIGENDIAN);
+    String name;
+    f.SetCodePage(CodePageClass::ANSI);
+    f.ReadString(name, 4);
+    SetName(name);
+    if (!valid_types.Find(Name()))
+    {
+      TraceClass::GotInvalidType(String::Format("Got invalid type: '{0}'.", Name()));
+      return false;
+    }
+    if (_Size == 1)
+    {
+      _LargeSize = _Size = f.ReadBinaryInt(8, BIGENDIAN);
+      f.Seek(_Offset + _LargeSize);
+    }
+    else if (_Size == 0)
+    {
+      return false;
+    }
+    else
+    {
+      f.Seek(_Offset + _Size);
+    }
+    return true;
+  }
+
+}
+
+class BoxFileClass
+{
+  static const uint                                                    FileTypeMagic = 0x70797466;
+
+  BoxClass                                                             Boxes;
+
+  ItemClass                                                            I;
+
+  FileClass                                                            F;
+
+  long                                                                 Offset,
+                                                                       Size;
+
+  NameListClass                                                        ValidTypes;
+
+  BoxFileClass(ItemClass i, FileClass f, long offset, NameListClass valid_types) :
+    Boxes(),
+    I = i,
+    F = f,
+    Offset = offset,
+    ValidTypes = valid_types
+  {
+  }
+
+  static bool IsValid(FileClass f, uint &major_brand)
+  {
+    long offset = f.GetPos();
+    f.Skip(4);
+    if (f.ReadBinaryInt(4) == FileTypeMagic)
+    {
+      f.ReadBinary(major_brand);
+      f.Seek(offset);
+      return true;
+    }
+    else
+    {
+      return false;
+    }
+  }
+
+  pure bool HasRequiredBoxes();
+
+  pure String GetFileExtension();
+
+  bool Read(ulong max_size, String &error_message)
+  {
+    bool retval, is_ok = true;
+    F.Seek(Offset);
+    while (is_ok && F.More())
+    {
+      BoxClass box();
+      if (is_ok = box.Read(F, ValidTypes))
+      {
+        Boxes.Insert(box);
+        Size += box.FinalSize();
+        if (Size > max_size)
+        {
+          error_message = "File-data exceeeds maximum size.";
+          return false;
+        }
+      }
+    }
+    retval = HasRequiredBoxes();
+    if (!retval)
+    {
+      error_message = "File does not have the required components.";
+    }
+    return retval;
+  }
+
+  String GetBoxList()
+  {
+    String retval;
+    MemoryFileClass t();
+    if (t.Open(512, WRITETEXTCRLF))
+    {
+      bool need_comma;
+      foreach (BoxClass box in Boxes)
+      {
+        if (need_comma)
+        {
+          t.Write(", ");
+        }
+        else
+        {
+          need_comma = true;
+        }
+        t.Write(box.Name());
+      }
+      t.MoveToString(retval);
+    }
+    return retval;
+  }
+
+  void WriteBoxesToConsole()
+  {
+    if (Boxes.Count())
+    {
+      Console.WriteLine("{0}, {1}", GetBoxList(), Size);
+    }
+  }
+
+  bool Extract(const String &output_folder, uint counter, String &error_message)
+  {
+    bool retval;
+    String name = String::Format("{0} ({1}, {2})", I.Name(), Offset, Size),
+           name_with_extension = String::Format("{0}.{1}", name, GetFileExtension()),
+           output_path = String::Format("{0}\\{1} - {2}", output_folder, String::FormatInt(counter, int::DECIMAL, 0, 6), name_with_extension);
+    LocalFileClass lf();
+    if (lf.Open(output_path, WRITE))
+    {
+      F.Seek(Offset);
+      lf.WriteBuffer(F, Size);
+      error_message = String::Format("Wrote data to '{0}'.", output_path);
+      retval = true;
+    }
+    else
+    {
+      error_message = String::Format("Unable to open output file at '{0}'.", output_path);
+    }
+    return retval;
+  }
+
+  void Bookmark(BookmarkClass folder, const String &comment)
+  {
+    BookmarkDecodeClass dec(folder);
+    dec.SetDataOffset(Offset);
+    dec.SetDataSize(Size);
+    dec.CopyItemData(I);
+    dec.SetComment(comment);
+  }
+}
+
+class MP4BoxFileClass : BoxFileClass
+{
+  MP4BoxFileClass(ItemClass i, FileClass f, long offset, NameListClass valid_types) :
+    super(i, f, offset, valid_types)
+  {
+
+  }
+
+  virtual bool HasRequiredBoxes()
+  {
+    return Boxes.Find("ftyp") &&
+           Boxes.Find("moov") &&
+           Boxes.Find("mdat");
+  }
+
+  virtual String GetFileExtension()
+  {
+    return "mp4";
+  }
+
+}
+
+class MovBoxFileClass : MP4BoxFileClass
+{
+  static const uint                                                               MajorBrand = 0x20207471;
+
+  MovBoxFileClass(ItemClass i, FileClass f, long offset, NameListClass valid_types) :
+    super(i, f, offset, valid_types)
+  {
+
+  }
+
+  virtual String GetFileExtension()
+  {
+    return "mov";
+  }
+
+}
+
+class HEICBoxFileClass : BoxFileClass
+{
+  static const uint                                                               MajorBrand = 0x63696568;
+
+  HEICBoxFileClass(ItemClass i, FileClass f, long offset, NameListClass valid_types) :
+    super(i, f, offset, valid_types)
+  {
+
+  }
+
+  virtual String GetFileExtension()
+  {
+    return "heic";
+  }
+
+  virtual bool HasRequiredBoxes()
+  {
+    return Boxes.Find("ftyp") &&
+           Boxes.Find("meta") &&
+           Boxes.Find("mdat");
+  }
+
+}
+
+class M4ABoxFileClass : MP4BoxFileClass
+{
+  static const uint                                                               MajorBrand = 0x2041344D;
+
+  M4ABoxFileClass(ItemClass i, FileClass f, long offset, NameListClass valid_types) :
+    super(i, f, offset, valid_types)
+  {
+
+  }
+
+  virtual String GetFileExtension()
+  {
+    return "m4a";
+  }
+}

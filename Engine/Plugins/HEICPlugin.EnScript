@@ -1,0 +1,214 @@
+include "..\\Core Files\\Interfaces\\PicturePluginInterface"
+include "ISO Base Media Format Library\\SK_ISOBaseMediaLib.EnScript"
+
+class HEICPlugin;
+
+// Dialog Class exposing variables specific to this format
+class HEICDialog: DialogClass {
+
+  CheckBoxClass   chkHEIC;
+  StaticTextClass  txtAuthor;
+
+  HEICDialog(DialogClass parent, HEICPlugin heic) :
+    DialogClass    (parent, "HEIC Settings:"),
+      chkHEIC      (this, "Search for HEICs", 10, 10, 100, 12, 0, heic._enabled),
+      txtAuthor      (this, "Plugin developed by:\n"
+                            "\n"
+                            "Simon Key\n"
+                            "skey@opentext.com",
+                                        175, 175, 100, 50, 0)
+  {
+  }
+}
+
+
+// Actual Format class, which implements the PicturePluginInterface
+class HEICPlugin:PicturePluginInterface{
+
+
+  HEICDialog         _dlg;
+
+  bool              _enabled;
+
+  double            _aspectRatio;
+  double            _bitDepth;
+
+  int               _headerIndex;
+
+  long              _rangeToIgnoreSearchHits;
+
+  String            _extension;
+  String            _header;
+  String            _metaData;
+  String            _pluginName;
+  String            _version;
+  String            _validBoxes;
+
+  NameListClass     _validBoxesList,
+                    _requiredBoxesList;
+
+
+  // Plugin's Constructor, where the base values are set and any readable values
+  //   are loaded from the Storage file
+  HEICPlugin() :
+    _validBoxesList(),
+    _requiredBoxesList()
+  {
+    _pluginName = "C4P Plugin - HEIC";
+    _enabled = true;
+    _extension = "HEIC";
+    _header = "....ftypheic";
+    _metaData = "";
+    _loadSettings();
+    _version = "1.0.0";
+    _validBoxes = "beam,free,ftyp,mdat,meco,meta,moof,moov,mfra,pdin,pfrt,sidx,skip,ssix,styp,uuid,wide";
+    _requiredBoxesList.Parse("ftyp,moov,mdat,meta", ",");
+  }
+
+  bool _buildBoxList(const String &current_list)
+  {
+    _validBoxesList.Close();
+    NameListClass boxes();
+    boxes.Parse(current_list, ",");
+    String t;
+    foreach (NameListClass box in boxes)
+    {
+      t = box.Name();
+      t.Trim(" ", TRIMSTART | TRIMEND);
+      if (t && !_validBoxesList.Find(t))
+      {
+        new NameListClass(_validBoxesList, t);
+      }
+    }
+    return _gotRequiredBoxTypes();
+  }
+
+  bool _gotRequiredBoxTypes()
+  {
+    bool retval;
+    if (_validBoxesList.Count() > _requiredBoxesList.Count())
+    {
+      retval = true;
+      foreach (NameListClass required in _requiredBoxesList)
+      {
+        if (!_validBoxesList.Find(required.Name()))
+        {
+          retval = false;
+          break;
+        }
+      }
+    }
+    return retval;
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("heicEnabled", _enabled);
+  }
+
+  long _validate(EntryClass e, long offset)
+  {
+
+    long retval;
+
+    // Reset the classwide variables
+    _aspectRatio = 0;
+    _bitDepth = 0;
+    _metaData = "";
+
+    EntryFileClass ef();
+
+    if(ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE))
+    {
+      ef.Seek(offset);
+    }
+    return retval;
+  }
+
+
+
+
+  // =======================================================================================
+  // Interface Functions that MUST be present and SHOULD tie in with the rest of your script
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return null;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+
+  virtual String MetaData(){
+    return _metaData;
+  }
+
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new HEICDialog(parent, this);
+    return _dlg;
+  }
+
+  virtual long Validate(EntryClass e, long offset){
+    return _validate(e, offset);
+  }
+
+  virtual double AspectRatio(){
+    return _aspectRatio;
+  }
+
+  virtual double BitDepth(){
+    return _bitDepth;
+  }
+
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 51200;  // 50kb
+  }
+  // =======================================================================================
+}
+
