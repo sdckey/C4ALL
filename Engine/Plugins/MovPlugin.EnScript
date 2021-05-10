@@ -2,6 +2,8 @@
   version 1.0.1 - fix for "division by zero" error @ "_movieLength = subAtomDuration / subAtomTimeScale;"
   version 1.0.2 - fix for improper logic at "5. Report back on the Findings" and moov atoms that FOLLOW the mdat atom
   version 2.0.0 - changed header to a simpler one, and removed the four byte wild chars at the start - put that in under BytesPrecedingHeader
+
+  DEPRECATED IN FAVOUR OF THE MP4GenericMoviePlugin and MP4QuickTimeMoviePlugin plugins.
 */
 
 include "..\\Core Files\\Interfaces\\MoviePluginInterface"
@@ -90,7 +92,7 @@ class MovPlugin: MoviePluginInterface{
     EntryFileClass ef();
 
     ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
-    
+
     ef.SetCodePage(CodePageClass::ANSI);
 
     // point the Entry to the starting offset

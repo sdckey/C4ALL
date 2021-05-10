@@ -2,6 +2,8 @@
   version 1.0.1 -added "wide" as a valid boxType, as encountered in landscape movies taken by the iPhone
                 -altered maxSize determination to handle deleted files (where Logical is actually greater than Physical)
           1.0.2 -added "uuid" as a valid boxType
+
+  DEPRECATED IN FAVOUR OF THE MP4_M4APlugin, MP4GenericMoviePlugin, MP4QuickTimeMoviePlugin and HEICPlugin plugins.
 */
 
 
@@ -149,9 +151,9 @@ class 3GPPlugin:MoviePluginInterface{
     EntryFileClass ef();
 
     ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
-    
+
     ef.SetCodePage(CodePageClass::ANSI);
-    
+
     ef.Seek(offset);
 
     // Specify the largest possible size this 3GP could be, based on the available data
