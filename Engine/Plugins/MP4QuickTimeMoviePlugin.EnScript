@@ -41,7 +41,7 @@ class Mp4QtDialog: DialogClass
       retval = Mp4Qt._buildBoxList(current_list);
       if (!retval)
       {
-        ErrorMessage(String::Format("List of valid box codes must contain three or more entries including {0}.", HEICBoxFileClass::RequiredBoxListAsString));
+        ErrorMessage(String::Format("List of valid box codes must contain the following entries at least: {0}.", MovBoxFileClass::RequiredBoxListAsString));
       }
     }
     return retval;
@@ -104,10 +104,10 @@ class Mp4QuickTimeMoviePlugin : MoviePluginInterface
 
       "The plugin finds the end of this and other ISO base media files by seeking from "
       "one top-level box to another until it reaches data that does not contain a valid "
-      "box-code, e.g., mdat, meta, moov, etc.\n\n"
+      "box-code (mdat, meta, moov, etc.)\n\n"
 
       "The examiner can specify the box-codes that are to be treated as valid albeit the "
-      "ftyp, mdat, amd moov codes are required -  QuickTime movies will be treated as "
+      "ftyp, mdat, and moov codes are required -  QuickTime movies will be treated as "
       "invalid if they don't have these boxes.\n\n"
 
       "Report bugs, etc, to:\n\n"
@@ -115,7 +115,7 @@ class Mp4QuickTimeMoviePlugin : MoviePluginInterface
       Lang::AUTHOR_SIMON
     )
   {
-    _requiredBoxesList.Parse(HEICBoxFileClass::RequiredBoxListAsString, ",");
+    _requiredBoxesList.Parse(MovBoxFileClass::RequiredBoxListAsString, ",");
     _maxSizeToExtract = _maxSizeToExtractInMB * 1024 * 1024 * 1024;
     _loadSettings();
     _buildBoxList(_validBoxes);

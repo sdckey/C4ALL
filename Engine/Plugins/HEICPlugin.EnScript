@@ -40,7 +40,7 @@ class HEICDialog: DialogClass
       retval = HEIC._buildBoxList(current_list);
       if (!retval)
       {
-        ErrorMessage(String::Format("List of valid box codes must contain three or more entries including {0}.", HEICBoxFileClass::RequiredBoxListAsString));
+        ErrorMessage(String::Format("List of valid box codes must contain the following entries at least: {0}.", HEICBoxFileClass::RequiredBoxListAsString));
       }
     }
     return retval;
@@ -101,10 +101,10 @@ class HEICPlugin:PicturePluginInterface{
 
       "The plugin finds the end of this and other ISO base media files by seeking from "
       "one top-level box to another until it reaches data that does not contain a valid "
-      "box-code, e.g., mdat, meta, moov, etc.\n\n"
+      "box-code (mdat, meta, moov, etc.)\n\n"
 
       "The examiner can specify the box-codes that are to be treated as valid albeit the "
-      "ftyp, mdat, amd meta codes are required -  HEIC/HEVC pictures will be treated as "
+      "ftyp, mdat, and meta codes are required -  HEIC/HEVC pictures will be treated as "
       "invalid if they don't have these boxes.\n\n"
 
       "Report bugs, etc, to:\n\n"

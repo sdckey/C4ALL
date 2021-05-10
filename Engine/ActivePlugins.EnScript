@@ -25,6 +25,7 @@ include "Plugins\\Jp2Plugin"
 include "Plugins\\JpgPlugin"
 include "Plugins\\Jpg64Plugin"
 include "Plugins\\Mj2Plugin"
+include "Plugins\\MP4_M4APlugin"
 include "Plugins\\MP4GenericMoviePlugin"
 include "Plugins\\MP4QuickTimeMoviePlugin"
 include "Plugins\\MpgPlugin"
@@ -56,6 +57,7 @@ class ActivePlugins{
   JpgPlugin               jpgPlugin;
   Jpg64Plugin             jpg64Plugin;
   Mj2Plugin               mj2Plugin;
+  Mp4_M4aPlugin           mp4_M4aPlugin;
   Mp4GenericMoviePlugin   mp4GenericMoviePlugin;
   Mp4QuickTimeMoviePlugin mp4QuickTimeMoviePlugin;
   MpgPlugin               mpgPlugin;
@@ -143,6 +145,9 @@ class ActivePlugins{
 
     mj2Plugin = new Mj2Plugin();
     new PluginList(myPlugins, mj2Plugin);
+
+    mp4_M4aPlugin = new Mp4_M4aPlugin();
+    new PluginList(myPlugins, mp4_M4aPlugin);
 
     mp4GenericMoviePlugin = new Mp4GenericMoviePlugin();
     new PluginList(myPlugins, mp4GenericMoviePlugin);

@@ -1,25 +1,25 @@
 include "..\\Core Files\\Interfaces\\MoviePluginInterface"
 include "ISO Base Media Format Library\\SK_ISOBaseMediaLib.EnScript"
 
-class Mp4GenericMoviePlugin;
+class Mp4_M4aPlugin;
 
 // Dialog Class exposing variables specific to this format
 
-class Mp4GenericDialog: DialogClass
+class Mp4_M4aDialog: DialogClass
 {
-  Mp4GenericMoviePlugin       Mp4;
-  CheckBoxClass               chkEnabled;
-  ButtonClass                 btnHelpText;
-  StringEditClass             strValidBoxes;
-  UIntEditClass               uintMaxSizeToExtractInMB;
+  Mp4_M4aPlugin                 M4a;
+  CheckBoxClass                 chkEnabled;
+  ButtonClass                   btnHelpText;
+  StringEditClass               strValidBoxes;
+  UIntEditClass                 uintMaxSizeToExtractInMB;
 
-  Mp4GenericDialog(DialogClass parent, Mp4GenericMoviePlugin mp4) :
-    DialogClass    (parent, mp4._pluginName),
-    Mp4 = mp4,
-    chkEnabled(this, "Search for generic MP4 movies", START, START, DEFAULT, DEFAULT, 0, Mp4._enabled),
+  Mp4_M4aDialog(DialogClass parent, Mp4_M4aPlugin m4a) :
+    DialogClass    (parent, m4a._pluginName),
+    M4a = m4a,
+    chkEnabled(this, "Search for M4As", START, START, DEFAULT, DEFAULT, 0, M4a._enabled),
     btnHelpText(this, "Help", 275, SAME, DEFAULT, DEFAULT, 0),
-    strValidBoxes(this, "Comma-delimited list of valid box codes", START, NEXT, 300, DEFAULT, 0, Mp4._validBoxes, -1, REQUIRED),
-    uintMaxSizeToExtractInMB(this, "Maximum size of file to extract (MB)", START, NEXT, 50, DEFAULT, 0,  Mp4._maxSizeToExtractInMB, 1, 0x7fffffff, REQUIRED)
+    strValidBoxes(this, "Comma-delimited list of valid box codes", START, NEXT, 300, DEFAULT, 0, M4a._validBoxes, -1, REQUIRED),
+    uintMaxSizeToExtractInMB(this, "Maximum size of file to extract (MB)", START, NEXT, 50, DEFAULT, 0,  M4a._maxSizeToExtractInMB, 1, 0x7fffffff, REQUIRED)
   {
   }
 
@@ -27,7 +27,7 @@ class Mp4GenericDialog: DialogClass
   {
     if (btnHelpText.Matches(event))
     {
-      SystemClass::Message(ICONINFORMATION, Mp4._pluginName, Mp4._helpText);
+      SystemClass::Message(ICONINFORMATION, M4a._pluginName, M4a._helpText);
     }
     super::ChildEvent(event);
   }
@@ -38,10 +38,10 @@ class Mp4GenericDialog: DialogClass
     if (retval)
     {
       String current_list = strValidBoxes.GetText();
-      retval = Mp4._buildBoxList(current_list);
+      retval = M4a._buildBoxList(current_list);
       if (!retval)
       {
-        ErrorMessage(String::Format("List of valid box codes must contain the following entries at least: {0}.", MP4BoxFileClass::RequiredBoxListAsString));
+        ErrorMessage(String::Format("List of valid box codes must contain the following entries at least: {0}.", M4ABoxFileClass::RequiredBoxListAsString));
       }
     }
     return retval;
@@ -51,10 +51,10 @@ class Mp4GenericDialog: DialogClass
 
 // Actual Format class, which implements the PicturePluginInterface
 
-class Mp4GenericMoviePlugin : MoviePluginInterface
+class Mp4_M4aPlugin : MoviePluginInterface
 {
 
-  Mp4GenericDialog  _dlg;
+  Mp4_M4aDialog       _dlg;
 
   bool              _enabled;
 
@@ -83,21 +83,21 @@ class Mp4GenericMoviePlugin : MoviePluginInterface
 
   // Plugin's Constructor, where the base values are set and any readable values
   // are loaded from the Storage file
-  Mp4GenericMoviePlugin() :
+  Mp4_M4aPlugin() :
     _validBoxes("beam,free,ftyp,mdat,meco,meta,moof,moov,mfra,pdin,pfrt,sidx,skip,ssix,styp,uuid,wide"),
     _validBoxesList(),
     _requiredBoxesList(),
     _maxSizeToExtractInMB = 10240,
-    _pluginName("C4P Plugin - MP4"),
+    _pluginName("C4P Plugin - M4A"),
     _enabled = true,
-    _extension("MP4"),
+    _extension("M4A"),
     _header(BoxFileFactoryClass::GrepKeyword),
     _version("1.0.0"),
     _helpText
     (
-      "This plugin searches for ISO base media files that are generic MP4 movie files.\n\n"
+      "This plugin searches for ISO base media files that are M4A audio files.\n\n"
 
-      "The plugin identifies each picture using the signature, '....ftyp'.\n\n"
+      "The plugin identifies each file using the signature, '....ftypM4A'.\n\n"
 
       "ISO base media files consist of one or more top-level boxes (aka atoms) inside "
       "of which may be other atoms stored in a hierarchical structure. Each box "
@@ -108,15 +108,17 @@ class Mp4GenericMoviePlugin : MoviePluginInterface
       "box-code (mdat, meta, moov, etc.)\n\n"
 
       "The examiner can specify the box-codes that are to be treated as valid albeit the "
-      "ftyp, mdat, and moov codes are required -  MP4 movies will be treated as "
+      "ftyp, mdat, and moov codes are required -  M4A files will be treated as "
       "invalid if they don't have these boxes.\n\n"
+
+      "Recovered M4A files that won't play may be DRM-protected M4P files.\n\n"
 
       "Report bugs, etc, to:\n\n"
 
       Lang::AUTHOR_SIMON
     )
   {
-    _requiredBoxesList.Parse(MP4BoxFileClass::RequiredBoxListAsString, ",");
+    _requiredBoxesList.Parse(M4ABoxFileClass::RequiredBoxListAsString, ",");
     _maxSizeToExtract = _maxSizeToExtractInMB * 1024 * 1024 * 1024;
     _loadSettings();
     _buildBoxList(_validBoxes);
@@ -184,15 +186,12 @@ class Mp4GenericMoviePlugin : MoviePluginInterface
     if(ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE))
     {
       BoxFileFactoryClass factory(_validBoxesList);
-      if (MP4BoxFileClass mp4_box = MP4BoxFileClass::TypeCast(factory.GetBoxFile(e, ef, offset)))
+      if (M4ABoxFileClass m4a_box = M4ABoxFileClass::TypeCast(factory.GetBoxFile(e, ef, offset)))
       {
-        if (mp4_box.DynamicType() == typeof(MP4BoxFileClass)) // May have type that inherits from
-        {                                                     // MP4BoxFileClass, which we don't want.
-          String error_message;
-          if (mp4_box.Read(_maxSizeToExtract, error_message))
-          {
-            retval = mp4_box.Size;
-          }
+        String error_message;
+        if (m4a_box.Read(_maxSizeToExtract, error_message))
+        {
+          retval = m4a_box.Size;
         }
       }
     }
@@ -237,7 +236,7 @@ class Mp4GenericMoviePlugin : MoviePluginInterface
   }
 
   virtual DialogClass GetDialog(DialogClass parent){
-    _dlg = new Mp4GenericDialog(parent, this);
+    _dlg = new Mp4_M4aDialog(parent, this);
     return _dlg;
   }
 
