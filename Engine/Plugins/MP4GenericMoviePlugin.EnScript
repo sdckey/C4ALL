@@ -1,24 +1,25 @@
-include "..\\Core Files\\Interfaces\\PicturePluginInterface"
+include "..\\Core Files\\Interfaces\\MoviePluginInterface"
 include "ISO Base Media Format Library\\SK_ISOBaseMediaLib.EnScript"
 
-class HEICPlugin;
+class Mp4GenericMoviePlugin;
 
 // Dialog Class exposing variables specific to this format
-class HEICDialog: DialogClass
-{
-  HEICPlugin       HEIC;
-  CheckBoxClass    chkHEIC;
-  ButtonClass      btnHelpText;
-  StringEditClass  strValidBoxes;
-  UIntEditClass    uintMaxSizeToExtractInMB;
 
-  HEICDialog(DialogClass parent, HEICPlugin heic) :
-    DialogClass    (parent, heic._pluginName),
-    HEIC = heic,
-    chkHEIC(this, "Search for HEICs", START, START, DEFAULT, DEFAULT, 0, heic._enabled),
+class Mp4GenericDialog: DialogClass
+{
+  Mp4GenericMoviePlugin       Mp4;
+  CheckBoxClass               chkEnabled;
+  ButtonClass                 btnHelpText;
+  StringEditClass             strValidBoxes;
+  UIntEditClass               uintMaxSizeToExtractInMB;
+
+  Mp4GenericDialog(DialogClass parent, Mp4GenericMoviePlugin mp4) :
+    DialogClass    (parent, mp4._pluginName),
+    Mp4 = mp4,
+    chkEnabled(this, "Search for generic MP4 movies", START, START, DEFAULT, DEFAULT, 0, Mp4._enabled),
     btnHelpText(this, "Help", 275, SAME, DEFAULT, DEFAULT, 0),
-    strValidBoxes(this, "Comma-delimited list of valid box codes", START, NEXT, 300, DEFAULT, 0, heic._validBoxes, -1, REQUIRED),
-    uintMaxSizeToExtractInMB(this, "Maximum size of file to extract (MB)", START, NEXT, 50, DEFAULT, 0,  heic._maxSizeToExtractInMB, 1, 0x7fffffff, REQUIRED)
+    strValidBoxes(this, "Comma-delimited list of valid box codes", START, NEXT, 300, DEFAULT, 0, Mp4._validBoxes, -1, REQUIRED),
+    uintMaxSizeToExtractInMB(this, "Maximum size of file to extract (MB)", START, NEXT, 50, DEFAULT, 0,  Mp4._maxSizeToExtractInMB, 1, 0x7fffffff, REQUIRED)
   {
   }
 
@@ -26,7 +27,7 @@ class HEICDialog: DialogClass
   {
     if (btnHelpText.Matches(event))
     {
-      SystemClass::Message(ICONINFORMATION, HEIC._pluginName, HEIC._helpText);
+      SystemClass::Message(ICONINFORMATION, Mp4._pluginName, Mp4._helpText);
     }
     super::ChildEvent(event);
   }
@@ -37,7 +38,7 @@ class HEICDialog: DialogClass
     if (retval)
     {
       String current_list = strValidBoxes.GetText();
-      retval = HEIC._buildBoxList(current_list);
+      retval = Mp4._buildBoxList(current_list);
       if (!retval)
       {
         ErrorMessage(String::Format("List of valid box codes must contain three or more entries including {0}.", HEICBoxFileClass::RequiredBoxListAsString));
@@ -49,14 +50,16 @@ class HEICDialog: DialogClass
 
 
 // Actual Format class, which implements the PicturePluginInterface
-class HEICPlugin:PicturePluginInterface{
+class Mp4GenericMoviePlugin : MoviePluginInterface
+{
 
-  HEICDialog         _dlg;
+  Mp4GenericDialog  _dlg;
 
   bool              _enabled;
 
   double            _aspectRatio;
   double            _bitDepth;
+  double            _movieLength;
 
   int               _headerIndex;
 
@@ -79,21 +82,21 @@ class HEICPlugin:PicturePluginInterface{
 
   // Plugin's Constructor, where the base values are set and any readable values
   // are loaded from the Storage file
-  HEICPlugin() :
+  Mp4GenericMoviePlugin() :
     _validBoxes("beam,free,ftyp,mdat,meco,meta,moof,moov,mfra,pdin,pfrt,sidx,skip,ssix,styp,uuid,wide"),
     _validBoxesList(),
     _requiredBoxesList(),
     _maxSizeToExtractInMB = 10240,
-    _pluginName("C4P Plugin - HEIC"),
+    _pluginName("C4P Plugin - MP4"),
     _enabled = true,
-    _extension("HEIC"),
+    _extension("MP4"),
     _header(BoxFileFactoryClass::GrepKeyword),
-    _version("1.0.1"),
+    _version("1.0.0"),
     _helpText
     (
-      "This plugin searches for ISO base media files that are HEIC/HEVC pictures.\n\n"
+      "This plugin searches for ISO base media files that are generic MP4 movie files.\n\n"
 
-      "The plugin identifies each picture using the signature, '....ftypheic'.\n\n"
+      "The plugin identifies each picture using the signature, '....ftyp'.\n\n"
 
       "ISO base media files consist of one or more top-level boxes (aka atoms) inside "
       "of which may be other atoms stored in a hierarchical structure. Each box "
@@ -104,7 +107,7 @@ class HEICPlugin:PicturePluginInterface{
       "box-code, e.g., mdat, meta, moov, etc.\n\n"
 
       "The examiner can specify the box-codes that are to be treated as valid albeit the "
-      "ftyp, mdat, amd meta codes are required -  HEIC/HEVC pictures will be treated as "
+      "ftyp, mdat, amd moov codes are required -  MP4 movies will be treated as "
       "invalid if they don't have these boxes.\n\n"
 
       "Report bugs, etc, to:\n\n"
@@ -160,9 +163,9 @@ class HEICPlugin:PicturePluginInterface{
   }
 
   void _settings(StorageClass myStorage){
-    myStorage.Value("heicEnabled", _enabled);
-    myStorage.Value("heicValidBoxes", _validBoxes);
-    myStorage.Value("heicMaxSizeToExtractInMB", _maxSizeToExtractInMB);
+    myStorage.Value("Enabled", _enabled);
+    myStorage.Value("ValidBoxes", _validBoxes);
+    myStorage.Value("MaxSizeToExtractInMB", _maxSizeToExtractInMB);
   }
 
   long _validate(EntryClass e, long offset)
@@ -171,20 +174,24 @@ class HEICPlugin:PicturePluginInterface{
 
     // Reset the classwide variables
     _aspectRatio = 0;
-    _bitDepth = 0;
-    _metaData = "";
+    _bitDepth    = 0;
+    _movieLength = 0;
+    _metaData    = "";
 
     EntryFileClass ef();
 
     if(ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE))
     {
       BoxFileFactoryClass factory(_validBoxesList);
-      if (HEICBoxFileClass heic_box = HEICBoxFileClass::TypeCast(factory.GetBoxFile(e, ef, offset)))
+      if (MP4BoxFileClass mp4_box = MP4BoxFileClass::TypeCast(factory.GetBoxFile(e, ef, offset)))
       {
-        String error_message;
-        if (heic_box.Read(_maxSizeToExtract, error_message))
-        {
-          retval = heic_box.Size;
+        if (mp4_box.DynamicType() == typeof(MP4BoxFileClass)) // May have type that inherits from
+        {                                                     // MP4BoxFileClass, which we don't want.
+          String error_message;
+          if (mp4_box.Read(_maxSizeToExtract, error_message))
+          {
+            retval = mp4_box.Size;
+          }
         }
       }
     }
@@ -229,7 +236,7 @@ class HEICPlugin:PicturePluginInterface{
   }
 
   virtual DialogClass GetDialog(DialogClass parent){
-    _dlg = new HEICDialog(parent, this);
+    _dlg = new Mp4GenericDialog(parent, this);
     return _dlg;
   }
 
@@ -271,6 +278,10 @@ class HEICPlugin:PicturePluginInterface{
   }
   virtual long SmallFileLimit(){
     return 51200;  // 50kb
+  }
+  virtual double MovieLength()
+  {
+    return _movieLength;
   }
   // =======================================================================================
 }

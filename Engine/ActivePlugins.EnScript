@@ -11,7 +11,6 @@
 
 include "Core Files\\Controllers\ConsoleController"
 include "Core Files\\PluginList"
-include "Plugins\\3GPPlugin"
 include "Plugins\\ArtPlugin"
 include "Plugins\\AviPlugin"
 include "Plugins\\BmpPlugin"
@@ -26,7 +25,8 @@ include "Plugins\\Jp2Plugin"
 include "Plugins\\JpgPlugin"
 include "Plugins\\Jpg64Plugin"
 include "Plugins\\Mj2Plugin"
-include "Plugins\\MovPlugin"
+include "Plugins\\MP4GenericMoviePlugin"
+include "Plugins\\MP4QuickTimeMoviePlugin"
 include "Plugins\\MpgPlugin"
 include "Plugins\\PngPlugin"
 include "Plugins\\PsdPlugin"
@@ -42,31 +42,31 @@ class ActivePlugins{
 
   PluginList  myPlugins;
 
-  3GPPlugin   gpPlugin;
-  ArtPlugin   artPlugin;
-  AviPlugin   aviPlugin;
-  BmpPlugin   bmpPlugin;
-  DngPlugin   dngPlugin;
-  Dng2Plugin  dng2Plugin;
-  EmfPlugin   emfPlugin;
-  FlvPlugin   flvPlugin;
-  GifPlugin   gifPlugin;
-  Gif64Plugin gif64Plugin;
-  HEICPlugin  heicPlugin;
-  Jp2Plugin   jp2Plugin;
-  JpgPlugin   jpgPlugin;
-  Jpg64Plugin jpg64Plugin;
-  Mj2Plugin   mj2Plugin;
-  MovPlugin   movPlugin;
-  MpgPlugin   mpgPlugin;
-  PngPlugin   pngPlugin;
-  PsdPlugin   psdPlugin;
-  TiffPlugin  tifPlugin;
-  Tiff2Plugin tif2Plugin;
-  WavPlugin   wavPlugin;
-  WmfPlugin   wmfPlugin;
-  WmfRtfPlugin wmf2Plugin;
-  WmvPlugin   wmvPlugin;
+  ArtPlugin               artPlugin;
+  AviPlugin               aviPlugin;
+  BmpPlugin               bmpPlugin;
+  DngPlugin               dngPlugin;
+  Dng2Plugin              dng2Plugin;
+  EmfPlugin               emfPlugin;
+  FlvPlugin               flvPlugin;
+  GifPlugin               gifPlugin;
+  Gif64Plugin             gif64Plugin;
+  HEICPlugin              heicPlugin;
+  Jp2Plugin               jp2Plugin;
+  JpgPlugin               jpgPlugin;
+  Jpg64Plugin             jpg64Plugin;
+  Mj2Plugin               mj2Plugin;
+  Mp4GenericMoviePlugin   mp4GenericMoviePlugin;
+  Mp4QuickTimeMoviePlugin mp4QuickTimeMoviePlugin;
+  MpgPlugin               mpgPlugin;
+  PngPlugin               pngPlugin;
+  PsdPlugin               psdPlugin;
+  TiffPlugin              tifPlugin;
+  Tiff2Plugin             tif2Plugin;
+  WavPlugin               wavPlugin;
+  WmfPlugin               wmfPlugin;
+  WmfRtfPlugin            wmf2Plugin;
+  WmvPlugin               wmvPlugin;
 
   CaseClass   _case;
 
@@ -133,10 +133,7 @@ class ActivePlugins{
     wmf2Plugin = new WmfRtfPlugin();
     new PluginList(myPlugins, wmf2Plugin);
 
-
     // Movie Plugins
-    gpPlugin = new 3GPPlugin();
-    new PluginList(myPlugins, gpPlugin);
 
     aviPlugin = new AviPlugin();
     new PluginList(myPlugins, aviPlugin);
@@ -147,8 +144,11 @@ class ActivePlugins{
     mj2Plugin = new Mj2Plugin();
     new PluginList(myPlugins, mj2Plugin);
 
-    movPlugin = new MovPlugin();
-    new PluginList(myPlugins, movPlugin);
+    mp4GenericMoviePlugin = new Mp4GenericMoviePlugin();
+    new PluginList(myPlugins, mp4GenericMoviePlugin);
+
+    mp4QuickTimeMoviePlugin = new Mp4QuickTimeMoviePlugin();
+    new PluginList(myPlugins, mp4QuickTimeMoviePlugin);
 
     mpgPlugin = new MpgPlugin();
     new PluginList(myPlugins, mpgPlugin);

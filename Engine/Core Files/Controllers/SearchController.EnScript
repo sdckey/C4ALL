@@ -189,9 +189,9 @@ class SearchController {
       else {
         if(MyOptions.Debug){
           if(fileType == 1)
-            MyPictureOutput.WriteDebug("SearchController", "Search Hit (" + offset + ") - BytesProceedingHeader(" + pluginHit.BytesPrecedingHeader() + ") value would put hit PRIOR to the the start of the Entry:  " + pluginHit.Extension());
+            MyPictureOutput.WriteDebug("SearchController", "Search hit (" + offset + ") - BytesProceedingHeader(" + pluginHit.BytesPrecedingHeader() + ") value would put hit PRIOR to the the start of the Entry:  " + pluginHit.Extension());
           else if (fileType == 0)
-            MyMovieOutput.WriteDebug("SearchController", "Search Hit (" + offset + ") - BytesProceedingHeader(" + pluginHit.BytesPrecedingHeader() + ") value would put hit PRIOR to the the start of the Entry:  " + pluginHit.Extension());
+            MyMovieOutput.WriteDebug("SearchController", "Search hit (" + offset + ") - BytesProceedingHeader(" + pluginHit.BytesPrecedingHeader() + ") value would put hit PRIOR to the the start of the Entry:  " + pluginHit.Extension());
 
         }
 
@@ -290,12 +290,14 @@ class SearchController {
 
         MyOptions.StatusRange(msg, searchLength);
 
-        if(h.Offset() >= fc.GetPos()){
+        if (h.Offset() >= fc.GetPos())
+        {
           fc.Seek(h.Offset());
 
-          if(MyOptions.Debug){
-            if(MyMovieOutput) MyMovieOutput.WriteDebug("SearchController", "Search Hit " + count + "/" + hitCount + ", OFF: " + fc.GetPos());
-            if(MyPictureOutput) MyPictureOutput.WriteDebug("SearchController", "Search Hit " + count + "/" + hitCount + ", OFF: " + fc.GetPos());
+          if (MyOptions.Debug)
+          {
+            if(MyMovieOutput) MyMovieOutput.WriteDebug("SearchController", "Search hit " + count + "/" + hitCount + ", OFF: " + fc.GetPos());
+            if(MyPictureOutput) MyPictureOutput.WriteDebug("SearchController", "Search hit " + count + "/" + hitCount + ", OFF: " + fc.GetPos());
           }
 
           // Call another function, which will analyse the hit and decide what format to validate with
@@ -304,15 +306,15 @@ class SearchController {
 
           long skipLength = CheckHit(entry, pi, h.Offset(), path);
           fc.Skip(skipLength);
-        } else {
-          /* takes up a lot of time in the debug mode to write this info out.
-          if(MyOptions.Debug) {
-            MyMovieOutput.WriteDebug("SearchController", "Search Hit falls within previously extracted data");
-            MyPictureOutput.WriteDebug("SearchController", "Search Hit falls within previously extracted data");
-          }
-          */
         }
-
+        else
+        {
+          if (MyOptions.Debug)
+          {
+            MyMovieOutput.WriteDebug("SearchController", "Search hit falls within previously extracted data");
+            MyPictureOutput.WriteDebug("SearchController", "Search hit falls within previously extracted data");
+          }
+        }
       }
 
       // Prepare for the next 500 MB chunk
@@ -331,7 +333,7 @@ class SearchController {
     EntryFileClass ef();
 
       ef.Open(entry, FileClass::SLACK | FileClass::NOINITIALIZE);
-    
+
     if(ef){
       Search_Base(entry, ef, startingAt, path);
     }

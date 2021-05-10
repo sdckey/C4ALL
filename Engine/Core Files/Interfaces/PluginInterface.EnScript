@@ -1,3 +1,8 @@
+language
+{
+  AUTHOR_SIMON                  "Simon Key <skey@opentext.com>\nSnr. Curriculum Developer - Learning Services (EnCase)\nOpenText Security (Reading Office, UK)"
+}
+
 /*
   This is the Base Class / Interface that all developed Plugins must adhere to.
   This will allow an infinite number of plugins to be used

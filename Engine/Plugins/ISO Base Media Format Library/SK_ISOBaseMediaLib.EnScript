@@ -88,9 +88,23 @@ class BoxFileClass
     }
   }
 
-  pure bool HasRequiredBoxes();
+  pure String GetRequiredBoxListAsString();
 
   pure String GetFileExtension();
+
+  bool HasRequiredBoxes()
+  {
+    NameListClass required_box_list();
+    required_box_list.Parse(GetRequiredBoxListAsString(), ",");
+    foreach(NameListClass required_box in required_box_list)
+    {
+      if (!Boxes.Find(required_box.Name()))
+      {
+        return false;
+      }
+    }
+    return true;
+  }
 
   bool Read(ulong max_size, String &error_message)
   {
@@ -183,17 +197,18 @@ class BoxFileClass
 
 class MP4BoxFileClass : BoxFileClass
 {
+
+  static const String                                                             RequiredBoxListAsString =  "ftyp,moov,mdat";
+
   MP4BoxFileClass(ItemClass i, FileClass f, long offset, NameListClass valid_types) :
     super(i, f, offset, valid_types)
   {
 
   }
 
-  virtual bool HasRequiredBoxes()
+  virtual String GetRequiredBoxListAsString()
   {
-    return Boxes.Find("ftyp") &&
-           Boxes.Find("moov") &&
-           Boxes.Find("mdat");
+    return RequiredBoxListAsString;
   }
 
   virtual String GetFileExtension()
@@ -224,6 +239,8 @@ class HEICBoxFileClass : BoxFileClass
 {
   static const uint                                                               MajorBrand = 0x63696568;
 
+  static const String                                                             RequiredBoxListAsString =  "ftyp,meta,mdat";
+
   HEICBoxFileClass(ItemClass i, FileClass f, long offset, NameListClass valid_types) :
     super(i, f, offset, valid_types)
   {
@@ -235,13 +252,10 @@ class HEICBoxFileClass : BoxFileClass
     return "heic";
   }
 
-  virtual bool HasRequiredBoxes()
+  virtual String GetRequiredBoxListAsString()
   {
-    return Boxes.Find("ftyp") &&
-           Boxes.Find("meta") &&
-           Boxes.Find("mdat");
+    return RequiredBoxListAsString;
   }
-
 }
 
 class M4ABoxFileClass : MP4BoxFileClass
@@ -258,4 +272,43 @@ class M4ABoxFileClass : MP4BoxFileClass
   {
     return "m4a";
   }
+}
+
+class BoxFileFactoryClass
+{
+  static const String                                                                          GrepKeyword = "....ftyp";
+
+  NameListClass                                                                                ValidTypes;
+
+  BoxFileFactoryClass(NameListClass valid_types) :
+    ValidTypes = valid_types
+  {
+
+  }
+
+  BoxFileClass GetBoxFile(EntryClass e, EntryFileClass f, long offset)
+  {
+    BoxFileClass retval;
+    f.Seek(offset);
+    uint major_brand;
+    if (BoxFileClass::IsValid(f, major_brand))
+    {
+      switch(major_brand)
+      {
+        case HEICBoxFileClass::MajorBrand:
+          retval = new HEICBoxFileClass(e, f, offset, ValidTypes);
+          break;
+        case MovBoxFileClass::MajorBrand:
+          retval = new MovBoxFileClass(e, f, offset, ValidTypes);
+          break;
+        case M4ABoxFileClass::MajorBrand:
+          retval = new M4ABoxFileClass(e, f, offset, ValidTypes);
+          break;
+        default:
+          retval = new MP4BoxFileClass(e, f, offset, ValidTypes);
+      }
+    }
+    return retval;
+  }
+
 }
