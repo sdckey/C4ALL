@@ -1,0 +1,235 @@
+include "..\Core Files\Interfaces\MoviePluginInterface"
+include "MKV Library\SK_MKVLib.EnScript"
+
+class MkvPlugin;
+
+// Dialog Class exposing variables specific to this format
+
+class MkvDialog: DialogClass
+{
+  MkvPlugin                   Mkv;
+  CheckBoxClass               chkEnabled;
+  ButtonClass                 btnHelpText;
+  UIntEditClass               uintMaxSizeToExtractInMB;
+
+  MkvDialog(DialogClass parent, MkvPlugin mkv) :
+    DialogClass    (parent, mkv._pluginName),
+    Mkv = mkv,
+    chkEnabled(this, "Search for MKVs", START, START, DEFAULT, DEFAULT, 0, Mkv._enabled),
+    btnHelpText(this, "Help", 275, SAME, DEFAULT, DEFAULT, 0),
+    uintMaxSizeToExtractInMB(this, "Maximum size of file to extract (MB)", START, NEXT, 50, DEFAULT, 0,  Mkv._maxSizeToExtractInMB, 1, 0x7fffffff, REQUIRED)
+  {
+  }
+
+  virtual void ChildEvent(const WindowClass::EventClass &event)
+  {
+    if (btnHelpText.Matches(event))
+    {
+      SystemClass::Message(ICONINFORMATION, Mkv._pluginName, Mkv._helpText);
+    }
+    super::ChildEvent(event);
+  }
+
+  virtual bool CanClose()
+  {
+    bool retval = super::CanClose();
+    if (retval)
+    {
+      Mkv._maxSizeToExtract = Mkv._maxSizeToExtractInMB * 1024 * 1024 * 1024;
+    }
+    return retval;
+  }
+}
+
+
+// Actual Format class, which implements the PicturePluginInterface
+
+class MkvPlugin : MoviePluginInterface
+{
+
+  MkvDialog  _dlg;
+
+  bool              _enabled;
+
+  double            _aspectRatio;
+  double            _bitDepth;
+  double            _movieLength;
+
+  int               _headerIndex;
+
+  uint              _maxSizeToExtractInMB;
+
+  long              _rangeToIgnoreSearchHits;
+  long              _maxSizeToExtract;
+
+  String            _extension;
+  String            _header;
+  String            _metaData;
+  String            _pluginName;
+  String            _version;
+  String            _helpText;
+
+
+  // Plugin's Constructor, where the base values are set and any readable values
+  // are loaded from the Storage file
+  MkvPlugin() :
+    _maxSizeToExtractInMB = 10240,
+    _pluginName("C4P Plugin - MKV"),
+    _enabled = true,
+    _extension("MKV"),
+    _header(MKVFoundFileClass::EBMLMagicKeyword),
+    _version("1.0.0"),
+    _helpText
+    (
+      "This plugin searches for MKV multimedia-container files, which "
+      "have the following GREP signature:\n\n"
+
+      "\t\\x1A\\x45\\xDF\\xA3\n\n"
+
+      "The script will expect files to have the standard MKV "
+      "format, which consists of a header and a single segment "
+      "containing the multimedia data.\n\n"
+
+      "The size of the file will be the size of the header plus the "
+      "size of the segment. Both sizes are stored as VINT "
+      "(variable integer) structures between 1 and 8 bytes in "
+      "length.\n\n"
+
+      "Report bugs, etc, to:\n\n"
+
+      Lang::AUTHOR_SIMON
+    )
+  {
+    _loadSettings();
+    _maxSizeToExtract = _maxSizeToExtractInMB * 1024 * 1024;
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("Enabled", _enabled);
+    myStorage.Value("MaxSizeToExtractInMB", _maxSizeToExtractInMB);
+  }
+
+  long _validate(EntryClass e, long offset)
+  {
+    long retval;
+
+    // Reset the classwide variables
+    _aspectRatio = 0;
+    _bitDepth    = 0;
+    _movieLength = 0;
+    _metaData    = "";
+
+    EntryFileClass ef();
+
+    if(ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE))
+    {
+      ef.Seek(offset);
+      MKVFoundFileClass found(ef);
+      if (found.IsValid())
+      {
+        if (found.Size() <= _maxSizeToExtract)
+        {
+          retval = found.Size();
+        }
+        else
+        {
+          WriteDebug("MKV Plugin", String::Format("Hit at offset {0} in '{1}' for {2}-byte(s) exceeds maximum size specified.", offset, e.ItemPath(), found.Size()), 0);
+        }
+      }
+    }
+    return retval;
+  }
+
+
+
+
+  // =======================================================================================
+  // Interface Functions that MUST be present and SHOULD tie in with the rest of your script
+
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return null;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+
+  virtual String MetaData(){
+    return _metaData;
+  }
+
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new MkvDialog(parent, this);
+    return _dlg;
+  }
+
+  virtual long Validate(EntryClass e, long offset){
+    return _validate(e, offset);
+  }
+
+  virtual double AspectRatio(){
+    return _aspectRatio;
+  }
+
+  virtual double BitDepth(){
+    return _bitDepth;
+  }
+
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 51200;  // 50kb
+  }
+  virtual double MovieLength()
+  {
+    return _movieLength;
+  }
+  // =======================================================================================
+}
+
