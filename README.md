@@ -9,7 +9,7 @@ Note that all files must be extracted from a release-archive preserving the rela
 
 Please be sure to remove the settings files from `%PROGRAMDATA%\EnCase\<version>\Storage` before running a new version.
 
-##Disclaimer
+## Disclaimer
 
 This script is not an official OpenText product.
 
