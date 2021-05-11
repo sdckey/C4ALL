@@ -7,7 +7,7 @@ The latest version of this script supports EnCase 7/8/20/21. EnCase 6 is no long
 
 Note that all files must be extracted from a release-archive preserving the relative paths in the process.
 
-Please be sure to remove the script's settings files from `%PROGRAMDATA%\EnCase\<version>\Storage` before running a new version.
+Please be sure to remove the script's settings-files from `%PROGRAMDATA%\EnCase\<version>\Storage` before running a new version.
 
 ## Disclaimer
 
