@@ -1,0 +1,135 @@
+class VINTClass
+{
+  private ulong                                                                                 _RawValue,
+                                                                                                _Value;
+
+  private bool                                                                                  _IsValid;
+
+  private uint                                                                                  _ByteCount;
+
+  bool IsValid()
+  {
+    return _IsValid;
+  }
+
+  ulong Value()
+  {
+    return _Value;
+  }
+
+  ulong RawValue()
+  {
+    return _RawValue;
+  }
+
+
+  VINTClass(FileClass f)
+  {
+    if ((byte leading = f.Peek()) && (leading != 0xff))
+    {
+      long mask;
+      for (int i = 7; i >= 0; i--)
+      {
+        if ((leading >> i) & 0x01)
+        {
+          _ByteCount = 1 + 7 - i;
+          _RawValue = _Value = f.ReadBinaryInt(_ByteCount, BIGENDIAN);
+          mask = 0xffffffffffffffff >> (((8 - _ByteCount) * 8) + _ByteCount);
+          _Value &= mask;
+          _IsValid = true;
+          break;
+        }
+      }
+    }
+  }
+}
+
+class MKVFoundFileClass
+{
+  static const uint                                                                             EBMLMagic = 0x1A45DFA3;
+
+  static const String                                                                           EBMLMagicKeyword = "\\x1A\\x45\\xDF\\xA3";
+
+  private ulong                                                                                 _Offset,
+                                                                                                _Size;
+
+  private bool                                                                                  _IsValid;
+
+  public bool IsValid()
+  {
+    return _IsValid;
+  }
+
+  public ulong Offset()
+  {
+    return _Offset;
+  }
+
+  public ulong Size()
+  {
+    return _Size;
+  }
+
+  MKVFoundFileClass(FileClass f)
+  {
+    _Offset = f.GetPos();
+    VINTClass EBMLHeaderID(f);
+    if (EBMLHeaderID.IsValid() && (EBMLHeaderID.RawValue() == EBMLMagic))
+    {
+      VINTClass EBMLHeaderLength(f);
+      if (EBMLHeaderLength.IsValid())
+      {
+        f.Skip(EBMLHeaderLength.Value());
+        VINTClass EBMLSegmentID(f);
+        if (EBMLSegmentID.IsValid())
+        {
+          VINTClass EBMLSegmentLength(f);
+          if (EBMLSegmentLength.IsValid())
+          {
+            _Size = f.GetPos() - _Offset + EBMLSegmentLength.Value();
+            _IsValid = true;
+          }
+        }
+      }
+    }
+  }
+
+  String GetIndexedFilename(EntryClass e, uint index)
+  {
+    String retval = String::Format("{0} - {1}", String::FormatInt(index, int::DECIMAL, 0, 6), e.Name());
+    if (retval.GetFileExt().Compare("") == 0)
+    {
+      retval += ".mkv";
+    }
+    return retval;
+  }
+
+  String GetInfoText(EntryClass e)
+  {
+    return String::Format("Found valid hit at offset {0} in {1} for {2} bytes.", _Offset, e.ItemPath(), _Size);
+  }
+
+  void Bookmark(BookmarkClass folder, EntryClass e, const String &comment)
+  {
+    BookmarkDecodeClass dec(folder);
+    dec.SetDataOffset(_Offset);
+    dec.SetDataSize(_Size);
+    dec.CopyItemData(e);
+    dec.SetComment(comment);
+  }
+
+  bool Extract(EntryClass e, FileClass f, const String &output_folder, uint index, String &output_path)
+  {
+    bool retval;
+    LocalFileClass output();
+    output_path = String::Format("{0}\\{1}", output_folder, GetIndexedFilename(e, index));
+    if (output.Open(output_path, WRITE))
+    {
+      f.Seek(_Offset);
+      output.WriteBuffer(f, _Size);
+      retval = true;
+    }
+    return retval;
+  }
+
+}
