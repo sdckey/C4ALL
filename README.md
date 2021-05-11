@@ -15,4 +15,4 @@ This script is not an official OpenText product.
 
 EnCase compatibility updates and new/updated plugins are provided as a courtesy when time allows.
 
-Please see the [licence] (https://github.com/sdckey/C4ALL/blob/master/LICENSE) for more details. 
+Please see the [licence](https://github.com/sdckey/C4ALL/blob/master/LICENSE) for more details. 
