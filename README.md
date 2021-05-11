@@ -13,6 +13,6 @@ Please be sure to remove the settings files from `%PROGRAMDATA%\EnCase\<version>
 
 This script is not an official OpenText product.
 
-EnCase compatibility updates and new/updated plugins are provided as a courtesy when time allows.
+EnCase compatibility updates and new/updated plugins are provided as a courtesy only when time allows.
 
 Please see the [licence](https://github.com/sdckey/C4ALL/blob/master/LICENSE) for more details. 
