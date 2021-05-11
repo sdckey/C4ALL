@@ -3,10 +3,16 @@ Repository for the C4ALL EnCase EnScript application originally created by Trevo
 
 Download releases from the [Releases](https://github.com/sdckey/C4ALL/releases) page.
 
+The latest version of this script supports EnCase 7/8/20/21. EnCase 6 is no longer supported.
+
 Note that all files must be extracted from a release-archive preserving the relative paths in the process.
 
-Version History
----------------
+Please be sure to remove the settings files from `%PROGRAMDATA%\EnCase\<version>\Storage` before running a new version.
 
-* Version 2.0.3.0 supports EnCase 6 and EnCase 8. EnCase 7 is **not** supported.
-* Version 2.0.6.0 supports EnCase 7, EnCase 8, EnCase 20 and EnCase 21. EnCase 6 is **not** supported.
+##Disclaimer
+
+This script is not an official OpenText product.
+
+EnCase compatibility updates and new/updated plugins are provided as a courtesy when time allows.
+
+Please see the [licence] https://github.com/sdckey/C4ALL/blob/master/LICENSE for more details. 
