@@ -32,9 +32,9 @@ class MainClass:ObserverInterface {
   MainClass()
   {
     MyOptions = new OptionsClass();
-    MyOptions.CompileDate     = "10-May-2021";
+    MyOptions.CompileDate     = "11-May-2021";
     MyOptions.ScriptName      = "C4All Strategy (EnCase 7/8/20/21)";
-    MyOptions.VersionNum      = "2.0.6.0 BETA";
+    MyOptions.VersionNum      = "2.0.7.0 BETA";
     MyOptions.VersionMajor    = 21;
     MyOptions.VersionMinor    = 1;
     MyOptions.VersionSubMajor = 0;

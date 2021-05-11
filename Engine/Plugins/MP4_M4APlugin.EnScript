@@ -44,6 +44,10 @@ class Mp4_M4aDialog: DialogClass
         ErrorMessage(String::Format("List of valid box codes must contain the following entries at least: {0}.", M4ABoxFileClass::RequiredBoxListAsString));
       }
     }
+    if (retval)
+    {
+      M4a._maxSizeToExtract = M4a._maxSizeToExtractInMB * 1024 * 1024;
+    }
     return retval;
   }
 }
@@ -84,7 +88,7 @@ class Mp4_M4aPlugin : MoviePluginInterface
   // Plugin's Constructor, where the base values are set and any readable values
   // are loaded from the Storage file
   Mp4_M4aPlugin() :
-    _validBoxes("beam,free,ftyp,mdat,meco,meta,moof,moov,mfra,pdin,pfrt,sidx,skip,ssix,styp,uuid,wide"),
+    _validBoxes(BoxFileClass::KnownTopLevelBoxes),
     _validBoxesList(),
     _requiredBoxesList(),
     _maxSizeToExtractInMB = 10240,
@@ -111,6 +115,12 @@ class Mp4_M4aPlugin : MoviePluginInterface
       "ftyp, mdat, and moov codes are required -  M4A files will be treated as "
       "invalid if they don't have these boxes.\n\n"
 
+      "It's important to note that the plugin does not check the validity of each "
+      "box, so the examiner should expect some boxes to be incomplete and/or "
+      "partially overwritten if found in unused disk space. This will be "
+      "particularly relevant to the last box due to it not being bounded by "
+      "another box.\n\n"
+
       "Recovered M4A files that won't play may be DRM-protected M4P files.\n\n"
 
       "Report bugs, etc, to:\n\n"
@@ -119,8 +129,8 @@ class Mp4_M4aPlugin : MoviePluginInterface
     )
   {
     _requiredBoxesList.Parse(M4ABoxFileClass::RequiredBoxListAsString, ",");
-    _maxSizeToExtract = _maxSizeToExtractInMB * 1024 * 1024 * 1024;
     _loadSettings();
+    _maxSizeToExtract = _maxSizeToExtractInMB * 1024 * 1024;
     _buildBoxList(_validBoxes);
   }
 

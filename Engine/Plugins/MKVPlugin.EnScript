@@ -35,7 +35,7 @@ class MkvDialog: DialogClass
     bool retval = super::CanClose();
     if (retval)
     {
-      Mkv._maxSizeToExtract = Mkv._maxSizeToExtractInMB * 1024 * 1024 * 1024;
+      Mkv._maxSizeToExtract = Mkv._maxSizeToExtractInMB * 1024 * 1024;
     }
     return retval;
   }
@@ -144,9 +144,6 @@ class MkvPlugin : MoviePluginInterface
     }
     return retval;
   }
-
-
-
 
   // =======================================================================================
   // Interface Functions that MUST be present and SHOULD tie in with the rest of your script

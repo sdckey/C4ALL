@@ -52,6 +52,8 @@ class BoxFileClass
 {
   static const uint                                                    FileTypeMagic = 0x70797466;
 
+  static const String                                                  KnownTopLevelBoxes = "beam,free,ftyp,mdat,meco,meta,moof,moov,mfra,pdin,pfrt,sidx,skip,ssix,styp,uuid,wide";
+
   BoxClass                                                             Boxes;
 
   ItemClass                                                            I;

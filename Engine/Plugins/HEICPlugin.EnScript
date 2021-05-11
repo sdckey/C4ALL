@@ -43,6 +43,10 @@ class HEICDialog: DialogClass
         ErrorMessage(String::Format("List of valid box codes must contain the following entries at least: {0}.", HEICBoxFileClass::RequiredBoxListAsString));
       }
     }
+    if (retval)
+    {
+      HEIC._maxSizeToExtract = HEIC._maxSizeToExtractInMB * 1024 * 1024;
+    }
     return retval;
   }
 }
@@ -80,7 +84,7 @@ class HEICPlugin:PicturePluginInterface{
   // Plugin's Constructor, where the base values are set and any readable values
   // are loaded from the Storage file
   HEICPlugin() :
-    _validBoxes("beam,free,ftyp,mdat,meco,meta,moof,moov,mfra,pdin,pfrt,sidx,skip,ssix,styp,uuid,wide"),
+    _validBoxes(BoxFileClass::KnownTopLevelBoxes),
     _validBoxesList(),
     _requiredBoxesList(),
     _maxSizeToExtractInMB = 10240,
@@ -107,14 +111,20 @@ class HEICPlugin:PicturePluginInterface{
       "ftyp, mdat, and meta codes are required -  HEIC/HEVC pictures will be treated as "
       "invalid if they don't have these boxes.\n\n"
 
+      "It's important to note that the plugin does not check the validity of each "
+      "box, so the examiner should expect some boxes to be incomplete and/or "
+      "partially overwritten if found in unused disk space. This will be "
+      "particularly relevant to the last box due to it not being bounded by "
+      "another box.\n\n"
+
       "Report bugs, etc, to:\n\n"
 
       Lang::AUTHOR_SIMON
     )
   {
     _requiredBoxesList.Parse(HEICBoxFileClass::RequiredBoxListAsString, ",");
-    _maxSizeToExtract = _maxSizeToExtractInMB * 1024 * 1024 * 1024;
     _loadSettings();
+    _maxSizeToExtract = _maxSizeToExtractInMB * 1024 * 1024;
     _buildBoxList(_validBoxes);
   }
 
@@ -160,9 +170,9 @@ class HEICPlugin:PicturePluginInterface{
   }
 
   void _settings(StorageClass myStorage){
-    myStorage.Value("heicEnabled", _enabled);
-    myStorage.Value("heicValidBoxes", _validBoxes);
-    myStorage.Value("heicMaxSizeToExtractInMB", _maxSizeToExtractInMB);
+    myStorage.Value("Enabled", _enabled);
+    myStorage.Value("ValidBoxes", _validBoxes);
+    myStorage.Value("MaxSizeToExtractInMB", _maxSizeToExtractInMB);
   }
 
   long _validate(EntryClass e, long offset)
