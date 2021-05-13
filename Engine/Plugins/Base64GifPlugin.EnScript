@@ -8,12 +8,26 @@ class Base64GifDialogClass : DialogClass
 
   Base64GifPlugin                                                                        Plugin;
 
+  ButtonClass                                                                            btnHelp;
+
+  UIntEditClass                                                                          uintMaxSizeMB;
 
   Base64GifDialogClass(DialogClass parent, Base64GifPlugin plugin) :
     super(parent, plugin._PluginName),
-    Plugin = plugin
+    Plugin = plugin,
+    btnHelp(this, "Help", START, START, DEFAULT, DEFAULT, 0),
+    uintMaxSizeMB(this, "Maximum size of Base64 data to process", START, NEXT, 60, DEFAULT, 0, Plugin._MaxSizeMB, 1, 0x7fffffff, REQUIRED)
   {
 
+  }
+
+  virtual void ChildEvent(const WindowClass::EventClass &event)
+  {
+    if (btnHelp.Matches(event))
+    {
+      SystemClass::Message(ICONINFORMATION, Plugin._PluginName, Plugin._HelpText);
+    }
+    super::ChildEvent(event);
   }
 }
 
