@@ -13,6 +13,9 @@ include "Core Files\\Controllers\ConsoleController"
 include "Core Files\\PluginList"
 include "Plugins\\ArtPlugin"
 include "Plugins\\AviPlugin"
+include "Plugins\\Base64GifPlugin"
+include "Plugins\\Base64PngPlugin"
+include "Plugins\\Base64JpgPlugin"
 include "Plugins\\BmpPlugin"
 include "Plugins\\DngPlugin"
 include "Plugins\\Dng2Plugin"
@@ -46,6 +49,9 @@ class ActivePlugins{
 
   ArtPlugin               artPlugin;
   AviPlugin               aviPlugin;
+  Base64GifPlugin         b64GifPlugin;
+  Base64PngPlugin         b64PngPlugin;
+  Base64JpgPlugin         b64JpgPlugin;
   BmpPlugin               bmpPlugin;
   DngPlugin               dngPlugin;
   Dng2Plugin              dng2Plugin;
@@ -84,10 +90,19 @@ class ActivePlugins{
   {
     myPlugins = new PluginList();
 
-
     // Picture Plugins
+
     artPlugin = new ArtPlugin();
     new PluginList(myPlugins, artPlugin);
+
+    b64GifPlugin = new Base64GifPlugin();
+    new PluginList(myPlugins, b64GifPlugin);
+
+    b64JpgPlugin = new Base64JpgPlugin();
+    new PluginList(myPlugins, b64JpgPlugin);
+
+    b64PngPlugin = new Base64PngPlugin();
+    new PluginList(myPlugins, b64PngPlugin);
 
     bmpPlugin = new BmpPlugin();
     new PluginList(myPlugins, bmpPlugin);
@@ -104,8 +119,8 @@ class ActivePlugins{
     gifPlugin = new GifPlugin();
     new PluginList(myPlugins, gifPlugin);
 
-    gif64Plugin = new Gif64Plugin();
-    new PluginList(myPlugins, gif64Plugin);
+    /* gif64Plugin = new Gif64Plugin();
+    new PluginList(myPlugins, gif64Plugin); */
 
     heicPlugin = new HEICPlugin();
     new PluginList(myPlugins, heicPlugin);
@@ -116,8 +131,8 @@ class ActivePlugins{
     jpgPlugin = new JpgPlugin();
     new PluginList(myPlugins, jpgPlugin);
 
-    jpg64Plugin = new Jpg64Plugin();
-    new PluginList(myPlugins, jpg64Plugin);
+    /* jpg64Plugin = new Jpg64Plugin();
+    new PluginList(myPlugins, jpg64Plugin); */
 
     pngPlugin = new PngPlugin();
     new PluginList(myPlugins, pngPlugin);

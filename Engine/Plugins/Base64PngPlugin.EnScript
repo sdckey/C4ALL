@@ -1,0 +1,209 @@
+include "..\\Core Files\\Interfaces\\PicturePluginInterface"
+include "Base64 Library\Base64DataLib.EnScript"
+
+class Base64PngPlugin;
+
+class Base64PngDialogClass : DialogClass
+{
+
+  Base64PngPlugin                                                                        Plugin;
+
+
+  Base64PngDialogClass(DialogClass parent, Base64PngPlugin plugin) :
+    super(parent, plugin._PluginName),
+    Plugin = plugin
+  {
+
+  }
+}
+
+class Base64PngPlugin : PicturePluginInterface
+{
+
+  DialogClass                                                                                _Dialog;
+
+  MemoryFileClass                                                                            MF;
+
+  uint                                                                                       _MaxSizeMB;
+
+  long                                                                                       _RangeToIgnoreSearchHits;
+
+  int                                                                                        _HeaderIndex;
+
+  String                                                                                     _Version,
+                                                                                             _Extension,
+                                                                                             _Header,
+                                                                                             _Metadata,
+                                                                                             _PluginName,
+                                                                                             _HelpText;
+
+  double                                                                                     _AspectRatio,
+                                                                                             _BitDepth;
+
+  bool                                                                                       _Enabled;
+
+  ImageClass::WriteOptions                                                                   _WriteOption;
+
+  Base64PngPlugin() :
+    _Enabled = true,
+    _Extension("PNG"),
+    _Header("iVBORw0KGg[opqr]"),
+    _WriteOption = ImageClass::PNG,
+    _Version("1.0.0"),
+    _PluginName("C4P Plugin - Base64 PNG"),
+    _HelpText
+    (
+      "This plugin is designed to locate Base64-encoded "
+      "PNG files.\n\n"
+
+      "The plugin was tested using MHTML files but may "
+      "also locate files originating elsewhere.\n\n"
+
+      "Report bugs, etc, to:\n\n"
+
+      Lang::AUTHOR_SIMON
+    ),
+    _MaxSizeMB = 20
+  {
+    LoadSettings();
+  }
+
+  bool Extract(const String &output_folder, uint index, String &output_path)
+  {
+    bool retval;
+    output_path = String::Format("{0}\\{1}.{2}", output_folder, String::FormatInt(index, int::DECIMAL, 0, 6), Extension());
+    LocalFileClass f();
+    if (f.Open(output_path, WRITE))
+    {
+      MF.Seek(0);
+      f.WriteBuffer(MF);
+      retval = true;
+    }
+    return retval;
+  }
+
+  void LoadSettings()
+  {
+    StorageClass myStorage(_PluginName);
+    Settings(myStorage);
+  }
+
+  void Settings(StorageClass myStorage){
+    myStorage.Value("Enabled", _Enabled);
+    myStorage.Value("MaxSizeMB", _MaxSizeMB);
+  }
+
+  void Reset()
+  {
+    if (MF)
+    {
+      delete MF;
+    }
+  }
+
+  virtual long Validate(EntryClass e, long offset)
+  {
+    long retval;
+    Reset();
+    EntryFileClass ef();
+    {
+      if (ef.Open(e, SLACK | NOINITIALIZE))
+      {
+        ef.Seek(offset);
+        Base64DataClass data(ef, _MaxSizeMB);
+        if (data.Read())
+        {
+          MemoryFileClass decoded = data.Decoded;
+          decoded.Seek(0);
+          ImageClass img();
+          if (img.Read(decoded))
+          {
+            MF = new MemoryFileClass();
+            if (MF.Open(decoded.GetSize(), WRITE))
+            {
+              if (img.Write(MF, _WriteOption))
+              {
+                Console.WriteLine("Wrote image to memory file.");
+                MF.Seek(0);
+                retval = data.Size;
+              }
+            }
+          }
+        }
+      }
+    }
+    return retval;
+  }
+
+  virtual String Version(){
+    return _Version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return MF;
+  }
+  virtual bool Enabled(){
+    return _Enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _Enabled = val;
+  }
+
+  virtual String Extension(){
+    return _Extension;
+  }
+  virtual void SetExtension(const String &val){
+    _Extension = val;
+  }
+
+  virtual String Header(){
+    return _Header;
+  }
+  virtual void SetHeader(const String &val){
+    _Header = val;
+  }
+
+  virtual String MetaData(){
+    return _Metadata;
+  }
+
+  virtual DialogClass GetDialog(DialogClass parent){
+    _Dialog = new Base64PngDialogClass(parent, this);
+    return _Dialog;
+  }
+
+  virtual double AspectRatio(){
+    return _AspectRatio;
+  }
+
+  virtual double BitDepth(){
+    return _BitDepth;
+  }
+
+  virtual int HeaderIndex(){
+    return _HeaderIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _HeaderIndex = val;
+  }
+
+  virtual void SaveSettings(){
+    StorageClass myStorage(_PluginName, StorageClass::WRITE);
+    Settings(myStorage);
+  }
+
+  virtual String PluginName(){
+    return _PluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _PluginName = val;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _RangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 51200;  // 50kb
+  }
+}

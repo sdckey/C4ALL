@@ -1,0 +1,147 @@
+class Base64DataClass
+{
+  FileClass                                                                                  F;
+
+  MemoryFileClass                                                                            Decoded;
+
+  long                                                                                       Offset,
+                                                                                             Size,
+                                                                                             SanitySizeLimit;
+
+  Base64DataClass(FileClass f, uint sanity_size_limit_mb) :
+    F = f,
+    SanitySizeLimit = sanity_size_limit_mb * 1024 * 1024,
+    Decoded()
+  {
+  }
+
+  bool Decode()
+  {
+    bool retval;
+    if (Size > 0)
+    {
+      MemoryFileClass t();
+      if (t.Open(Size, WRITE))
+      {
+        F.Seek(Offset);
+        t.WriteBuffer(F, Size);
+        t.Seek(0);
+        if (Decoded.Open(Size, WRITE))
+        {
+          retval = t.ReadDecode(Decoded, -1, BASE64);
+        }
+      }
+    }
+    return retval;
+  }
+
+  bool Read()
+  {
+    bool retval;
+    Offset = F.GetPos();
+    F.SetCodePage(CodePageClass::ANSI);
+    char current, previous;
+    while (F.GetPos() < (Offset + SanitySizeLimit))
+    {
+      current = F.Get();
+      if (!IsValidChar(current))
+      {
+        Size = F.GetPos() - Offset - 1;
+        retval = Decode();
+        break;
+      }
+      previous = current;
+    }
+    return retval;
+  }
+
+  bool IsValidChar(char c)
+  {
+    return c == 0x0a              ||
+           c == 0x0d              ||
+           c == '+'               ||
+           c == '/'               ||
+           c == '='               ||
+           (c >= 'A' && c <= 'Z') ||
+           (c >= 'a' && c <= 'z') ||
+           (c >= '0' && c <= '9');
+  }
+}
+
+class Base64Image
+{
+  MemoryFileClass                                                                            MF;
+
+  long                                                                                       SanityLimitMB;
+
+  Base64Image(long sanity_limit_mb) :
+    SanityLimitMB = sanity_limit_mb
+  {
+
+  }
+
+  bool Extract(const String &output_folder, uint index, String &output_path)
+  {
+    bool retval;
+    output_path = String::Format("{0}\\{1}.{2}", output_folder, String::FormatInt(index, int::DECIMAL, 0, 6), GetExtension());
+    LocalFileClass f();
+    if (f.Open(output_path, WRITE))
+    {
+      MF.Seek(0);
+      f.WriteBuffer(MF);
+      retval = true;
+    }
+    return retval;
+  }
+
+  pure String GetExtension();
+
+  pure ImageClass::WriteOptions GetWriteOption();
+
+  MemoryFileClass GetMemoryFileClass()
+  {
+    return MF;
+  }
+
+  void Reset()
+  {
+    if (MF)
+    {
+      delete MF;
+    }
+  }
+
+  long Validate(EntryClass e, long offset)
+  {
+    long retval;
+    Reset();
+    EntryFileClass ef();
+    {
+      if (ef.Open(e, SLACK | NOINITIALIZE))
+      {
+        ef.Seek(offset);
+        Base64DataClass data(ef, SanityLimitMB);
+        if (data.Read())
+        {
+          MemoryFileClass decoded = data.Decoded;
+          decoded.Seek(0);
+          ImageClass img();
+          if (img.Read(decoded))
+          {
+            MF = new MemoryFileClass();
+            if (MF.Open(decoded.GetSize(), WRITE))
+            {
+              if (img.Write(MF, GetWriteOption()))
+              {
+                Console.WriteLine("Wrote image to memory file.");
+                MF.Seek(0);
+                retval = data.Size;
+              }
+            }
+          }
+        }
+      }
+    }
+    return retval;
+  }
+}

@@ -24,12 +24,13 @@ class TreeTableEditClassDialog: DialogClass {
 
     if(lst.Matches(event) && event.Type() == 4 ){
       // means the user double-clicked a row
-      NodeClass n = lst.GetValue();
-      String extension = n.Name();
+      PluginListClass n = PluginListClass::TypeCast(lst.GetValue());
+      String plugin_name = n.PluginName;
 
       forall(PluginListClass plc in Plugins){
-        if(plc.Represents){
-          if(extension == plc.Represents.Plugin.Extension()){
+        if(plc.Represents)
+        {
+          if(plugin_name == plc.Represents.Plugin.PluginName()){
             DialogClass dlg = plc.Represents.Plugin.GetDialog(this);
             if(dlg.Execute() == SystemClass::OK){
               bool b = plc.Represents.Plugin.Enabled();
@@ -44,12 +45,12 @@ class TreeTableEditClassDialog: DialogClass {
     }
     else if(lst.Matches(event) && event.Type() == 1){
       // means the user changed the checked setting
-      NodeClass n = lst.GetValue();
-      String extension = n.Name();
+      PluginListClass n = PluginListClass::TypeCast(lst.GetValue());
+      String plugin_name = n.PluginName;
 
       forall(PluginListClass plc in Plugins){
         if(plc.Represents){
-          if(extension == plc.Represents.Plugin.Extension()){
+          if(plugin_name == plc.Represents.Plugin.PluginName()){
             bool b = n.IsSelected();
             plc.SetSelected(b);
             plc.Represents.Plugin.SetEnabled(b);
