@@ -119,6 +119,11 @@ class ActivePlugins{
     gifPlugin = new GifPlugin();
     new PluginList(myPlugins, gifPlugin);
 
+   /*
+    * The following plugin has been disabled
+    * because it interferes with Base64GifPlugin.
+    */
+
     /* gif64Plugin = new Gif64Plugin();
     new PluginList(myPlugins, gif64Plugin); */
 
@@ -130,6 +135,11 @@ class ActivePlugins{
 
     jpgPlugin = new JpgPlugin();
     new PluginList(myPlugins, jpgPlugin);
+
+   /*
+    * The following plugin has been disabled
+    * because it interferes with Base64JpgPlugin.
+    */
 
     /* jpg64Plugin = new Jpg64Plugin();
     new PluginList(myPlugins, jpg64Plugin); */
@@ -228,6 +238,7 @@ class ActivePlugins{
 
       // Build the Search class with the selected file headers and update the plugins
       // so they know what index they are in the search object
+
       int indexNumber;
       foreach(PluginList p in myPlugins){
         if(p.Plugin.Enabled()){

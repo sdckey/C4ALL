@@ -32,7 +32,7 @@ class MainClass:ObserverInterface {
   MainClass()
   {
     MyOptions = new OptionsClass();
-    MyOptions.CompileDate     = "13-May-2021";
+    MyOptions.CompileDate     = "14-May-2021";
     MyOptions.ScriptName      = "C4All Strategy (EnCase 7/8/20/21)";
     MyOptions.VersionNum      = "2.0.8.0 BETA";
     MyOptions.VersionMajor    = 21;
@@ -225,6 +225,13 @@ class MainClass:ObserverInterface {
             AddFileToLef(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\C4M\\Victim Report.xml");
             AddFileToLef(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\C4M\\Results.txt");
 
+          }
+
+          // Step 11: Open report folder
+
+          if (MyOptions.OpenReportFolder)
+          {
+            SystemClass::BrowsePath(MyOptions.ReportPath);
           }
         }
         else {

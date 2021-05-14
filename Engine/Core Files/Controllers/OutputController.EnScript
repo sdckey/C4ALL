@@ -482,6 +482,8 @@ class OutputController {
       else
         settings.WriteLine("Preserve the C4All package in a LEF?\tN");
 
+      settings.WriteLine("Open the package folder upon completion?\t{0}", MyOptions.OpenReportFolder ? "Y" : "N");
+
       // Selected Files Options
       settings.WriteLine("");
       if(MyOptions.SearchSelected == 0)

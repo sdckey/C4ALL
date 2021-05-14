@@ -27,6 +27,7 @@ class OptionsClass {
   bool        ExcludeUnallocated;
   bool        SaveConsole;
   bool        CreateLef;
+  bool        OpenReportFolder;
 
   LogicalEvidenceFileClass Lef;
 

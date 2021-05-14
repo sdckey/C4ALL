@@ -47,6 +47,7 @@ class SettingsController {
     myStorage.Value("SaveConsole", MyOptions.SaveConsole);
     myStorage.Value("IgnoreSmall", MyOptions.IgnoreSmall);
     myStorage.Value("CreateLef", MyOptions.CreateLef);
+    myStorage.Value("OpenReportFolder", MyOptions.OpenReportFolder);
   }
 
 

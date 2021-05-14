@@ -73,9 +73,16 @@ class Base64JpgPlugin : PicturePluginInterface
       "The plugin was tested using MHTML files but may "
       "also locate files originating elsewhere.\n\n"
 
+      "Please note that the Base64 validation and "
+      "decoding process may increase processing time "
+      "and sometimes give the impression that the "
+      "script is stuck in a loop.\n\n"
+
       "Report bugs, etc, to:\n\n"
 
-      Lang::AUTHOR_SIMON
+      Lang::AUTHOR_SIMON "\n\n"
+
+      "14th May, 2021"
     ),
     _MaxSizeMB = 20
   {

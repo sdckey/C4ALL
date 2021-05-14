@@ -40,6 +40,7 @@ class SettingsDialog: DialogClass {
   PathEditClass     txtFolder;
   CheckBoxClass     chkBook;
   CheckBoxClass     chkLef;
+  CheckBoxClass     chkOpenFolder;
 
   // Selected Files Options
   RadioButtonClass  radSelection;
@@ -75,16 +76,19 @@ class SettingsDialog: DialogClass {
     DialogClass    (parent, "Main Settings Page:"),
 
       // C4P Disclosure Package Options
-      grpOutput    (this, "C4P/C4M Disclosure Package Options",  10,   8, 300, 57, 0),
+      grpOutput    (this, "C4P/C4M Disclosure Package Options",  10,   8, 300, 67, 0),
       txtFolder    (this, "Create Package here:",            30,  17, 220, 12, 0, myOptions.ReportPath, WindowClass::REQUIRED),
       chkBook      (this, "Create a Bookmark for every file that is extracted",
                                                              40,  40, 150, 12, 0, myOptions.MakeBookmarks),
       chkLef       (this, "Preserve the C4All package in a LEF",
                                                              40,  50, 150, 12, 0, myOptions.CreateLef),
+      chkOpenFolder(this, "Open package folder upon completion",
+                                                             40,  60, 150, 12, 0, myOptions.OpenReportFolder),
+
       btnHelp      (this, "?",                              290,  10,  20, 12, 0),
 
       // Selected Files Options
-      radSelection (this, "Selected Files Options:",         10,  70, 150, 57, 0, myOptions.SearchSelected,
+      radSelection (this, "Selected Files Options:",         10,  80, 150, 57, 0, myOptions.SearchSelected,
                                                                                                   "Search All Files\t" +
                                                                                                   "Search All Tagged Files\t"
                                                                                                   "Exclude All Tagged Files\t" +
@@ -97,8 +101,8 @@ class SettingsDialog: DialogClass {
       chkNoSmall   (this, "Ignore Small Files",              20, 205, 135, 12, 0, myOptions.IgnoreSmall),
 
       // Database & Library Options
-      radDatabase  (this, "Pre-Categorization Options:",    180,  70, 130, 85, 0, myOptions.DbType, "No Database\tSQL Server\tmySQL"),
-      chkLibrary   (this, "Populate Picture Library",       190, 130, 110, 12, 0, myOptions.MakeLibrary),
+      radDatabase  (this, "Pre-Categorization Options:",    180,  80, 130, 85, 0, myOptions.DbType, "No Database\tSQL Server\tmySQL"),
+      chkLibrary   (this, "Populate Picture Library",       190, 140, 110, 12, 0, myOptions.MakeLibrary),
 
       // Debug Options
       grpDebug     (this, "Debugging Options:",             170, 160, 140, 85, 0),
