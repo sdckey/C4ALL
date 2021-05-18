@@ -3,13 +3,13 @@ Repository for the C4ALL EnCase EnScript application originally created by Trevo
 
 Download releases from the [Releases](https://github.com/sdckey/C4ALL/releases) page.
 
+Questions, bugs, feature requests, etc. should be posted to the [Issues](https://github.com/sdckey/C4ALL/issues) page.
+
 The latest version of this script supports EnCase 7/8/20/21. EnCase 6 is no longer supported.
 
 Note that all files must be extracted from a release-archive preserving the relative paths in the process.
 
 Please be sure to remove script and plugin settings from `%PROGRAMDATA%\EnCase\<version>\Storage` before running a new version.
-
-Questions, bugs, feature requests, etc. should be posted to the [Issues](https://github.com/sdckey/C4ALL/issues) page.
 
 ## Disclaimer
 
