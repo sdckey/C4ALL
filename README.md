@@ -9,6 +9,8 @@ Note that all files must be extracted from a release-archive preserving the rela
 
 Please be sure to remove script and plugin settings from `%PROGRAMDATA%\EnCase\<version>\Storage` before running a new version.
 
+Questions, bugs, feature requests, etc. should be posted to the (Issues)[https://github.com/sdckey/C4ALL/issues] page.
+
 ## Disclaimer
 
 This script is not an official OpenText product.
