@@ -13,4 +13,10 @@ class HashController {
 
     return hash;
   }
+
+  String GetSha1Hash(FileClass f, long length)
+  {
+    DigestClass digest();
+    return digest.Compute(f, SHA1, length);
+  }
 }
