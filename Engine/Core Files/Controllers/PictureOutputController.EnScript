@@ -149,18 +149,35 @@ class PictureOutputController: OutputController {
           MyConsole.WriteFullLine("Failed to open entry: " + path + pc.Entry.FullPath());
       }
 
-      // 2. Get the file's MD5 hash
+      // 2. Get the file's MD5 and SHA1 hashes
       String hash;
       String hash2;
-      if(pc.MF){
+      String sha1Hash;
+
+      if(pc.MF)
+      {
         pc.MF.Seek(0);
         hash = MyHash.GetMd5Hash(pc.MF, pc.FileLength);
-        if("jpg".Compare(pc.Extension, false) == 0) hash2 = MyHash.GetMd5Hash(pc.MF, pc.FileLength - 2);
+
+        pc.MF.Seek(0);
+        sha1Hash = MyHash.GetSha1Hash(pc.MF, pc.FileLength);
+
+        if("jpg".Compare(pc.Extension, false) == 0)
+        {
+          pc.MF.Seek(0);
+          hash2 = MyHash.GetMd5Hash(pc.MF, pc.FileLength - 2);
+        }
       }
-      else {
+      else
+      {
         ef.Seek(pc.Offset);
         hash = MyHash.GetMd5Hash(ef, pc.FileLength);
-        if("jpg".Compare(pc.Extension, false) == 0) {
+
+        ef.Seek(pc.Offset);
+        sha1Hash = MyHash.GetSha1Hash(ef, pc.FileLength);
+
+        if("jpg".Compare(pc.Extension, false) == 0)
+        {
           ef.Seek(pc.Offset);
           hash2 = MyHash.GetMd5Hash(ef, pc.FileLength-2);
         }
@@ -293,7 +310,7 @@ class PictureOutputController: OutputController {
           AddVictimEntry(victimPath, hash);
 
           // 7. Write in the XML
-          AddXmlEntry(pc, hash, pc.Entry.HashValue(), category, path, pathVal, fileName);
+          AddXmlEntry(pc, hash, pc.Entry.HashValue(), category, path, pathVal, fileName, sha1Hash);
 
           // 8.  Bookmark the picture
           AddBookmark(pc, fileName);
@@ -315,7 +332,7 @@ class PictureOutputController: OutputController {
 
 
 
-  virtual void AddXmlEntry(PictureCarveClass pc, const String &hash, const String &encaseHash, int category, const String &path, const String &pathVal, const String &fileName){
+  virtual void AddXmlEntry(PictureCarveClass pc, const String &hash, const String &encaseHash, int category, const String &path, const String &pathVal, const String &fileName, const String &sha1Hash){
 
     String lineValue;
     String accessed, created, written, modified, deleted;
@@ -344,7 +361,18 @@ class PictureOutputController: OutputController {
                 "    <accessed>"           + accessed                                    + "</accessed>\r\n" +
                 "    <written>"            + written                                     + "</written>\r\n" +
                 "    <deleted>"            + deleted                                     + "</deleted>\r\n" +
+
+                /*
+                 * At the point of adding SHA1 support, it wasn't clear as to how the SHA1-hash would be consumed;
+                 * also, whether removing/renaming the 'hash' node would break something in an existing consumer-app.
+                 *
+                 * Accordingly, the safest option seemed to be the addition of a new 'sha1Hash' node, which would most likely
+                 * be ignored by any true XML parser that didn't recognise it.
+                 */
+
+
                 "    <hash>"               + hash                                        + "</hash>\r\n" +
+                "    <sha1Hash>"           + sha1Hash                                    + "</sha1Hash>\r\n" +
                 "    <encaseHash>"         + encaseHash                                  + "</encaseHash>\r\n" +
                 "    <myDescription>"      + pc.Entry.Description()                      + "</myDescription>\r\n" +
                 "    <physicalLocation>"   + pc.Entry.PhysicalLocation()                 + "</physicalLocation>\r\n" +

@@ -96,7 +96,6 @@ class OptionsClass {
     LoginName = "c4p_user";
     Password = "password";
     SelectedTags = new StringArray;
-    MyIter = new ItemIteratorClass(Case, ItemIteratorClass::NOPROXY | ItemIteratorClass::NORECURSE, ItemIteratorClass::ALL);
   }
 
   ~OptionsClass()
