@@ -1,0 +1,302 @@
+/*
+ *  This script is designed to demonstrate automation of
+ *  the following:
+ *
+ *  1) Creation of a case with a specific path/name.
+ *  2) Addition of evidence from a specific folder.
+ *  3) Evidence processing of said evidence so as to
+ *     mount compound files and perform hash/signature
+ *     analysis.
+ *  4) Saving the case.
+ *  5) Extraction of pictures, movies and other media
+ *     by running C4ALL V2.0.10.0 BETA in automated
+ *     mode using the '-RunAutomated' command-line
+ *     parameter.
+ *
+ *  When running in automated mode, C4ALL will write its
+ *  output to the current case's export folder using the
+ *  settings that were saved when the script was last
+ *  run via the GUI. No dialog will be presented.
+ *
+ *  The evidence processor's settings-file should be created
+ *  beforehand using the evidence processor dialog in EnCase.
+ *  The script expects this file to be located in the
+ *  'ProcessorOptions' sub-folder of the EnCase program folder.
+ *  The settings-file accompanying this example must be copied
+ *  to that folder beforehand.
+ *
+ *  The script is designed to be invoked from the command-
+ *  line using a batch file called 'demo.cmd', which should
+ *  accompany this script. The paths specified in the batch
+ *  file must be adjusted before running the script on the
+ *  examiner's machine.
+ *
+ *  The folder specified for the case file must exist before
+ *  running the script albeit the script will create the case
+ *  and associated folder structure.
+ *
+ *  It's unclear why, but one current limitation is that
+ *  EnCase must not be running beforehand or else an error
+ *  will be generated.
+ *
+ *  Tested using EnCase 21.1.0.68 and C4ALL V2.0.10.0 BETA.
+ *
+ *  Report bugs to:
+ *
+ *  Simon Key <skey@opentext.com>
+ *  Snr. Curriculum Developer - Learning Services (EnCase)
+ *  OpenText Security (Reading Office, UK)
+ *
+ *  19th May 2021
+ */
+
+class MainClass {
+
+  static const uint                                                   timeout_in_minutes = 480; // 8-hours
+
+  static const String                                                 enproc_file_name = "Hash, Signature Analysis and Mount Compound Files.EnProc";
+
+  String                                                              EvidenceFolder, // Sub-folders will not be processed
+                                                                      CasePath,
+                                                                      CaseName,
+                                                                      C4AllPath;
+
+
+  uint                                                                Count;
+
+  CaseClass                                                           C;
+
+  NameListClass                                                       EvExtensions;
+
+  MainClass() :
+    EvExtensions()
+  {
+    EvExtensions.Parse("Lx01,L01,Ex01,E01", ",");
+  }
+
+  void Main() {
+    SystemClass::ClearConsole(1);
+    Console.WriteLine("Script started.");
+    if (GetEvidenceFolderAndCasePath())
+    {
+      if (GetCase())
+      {
+        String ep_options_path = GetEPOptionsPath();
+
+        if (LocalMachine.PathExists(ep_options_path))
+        {
+          String error_message;
+          if (ProcessEvidence(ep_options_path, error_message))
+          {
+            if (Process())
+            {
+              if (C.Write(CasePath))
+              {
+                Console.WriteLine("Case saved.");
+                Console.WriteLine("Script finished.");
+              }
+              else
+              {
+                Console.WriteLine("Unable to save case.");
+              }
+            }
+            else
+            {
+              Console.WriteLine("Unable to launch C4ALL");
+            }
+          }
+          else
+          {
+            Console.WriteLine(error_message);
+          }
+        }
+        else
+        {
+          Console.WriteLine("Can't get the processor options (*.EnProc) file.");
+        }
+      }
+      else
+      {
+        Console.WriteLine("No case or evidence in the case!");
+      }
+    }
+    else
+    {
+      Console.WriteLine("Can't identify the case and evidence-folder paths.\n\n"
+
+                        "Make sure you're using the correct command-line parameters."
+                       );
+    }
+  }
+
+  bool GetEvidenceFolderAndCasePathFromDialogs()
+  {
+    return SystemClass::PathDialog(CasePath, "Choose case path", "case", "EnCase Case Files\t*.case", CREATE) &&
+           SystemClass::FolderDialog(EvidenceFolder, "Choose evidence folder");
+  }
+
+  bool GetEvidenceFolderAndCasePath()
+  {
+    bool retval;
+    NameListClass cmd_args = SystemClass::GetArgs();
+    if (cmd_args.Count() == 3)
+    {
+      CasePath       = cmd_args.GetChild(0).Name();
+      EvidenceFolder = cmd_args.GetChild(1).Name();
+      C4AllPath      = cmd_args.GetChild(2).Name();
+      if (LocalMachine.PathExists(EvidenceFolder))
+      {
+        String case_folder = CasePath.GetFilePath();
+        if (LocalMachine.PathExists(case_folder))
+        {
+          retval = true;
+        }
+      }
+    }
+    else
+    {
+      retval = GetEvidenceFolderAndCasePathFromDialogs();
+    }
+    return retval;
+  }
+
+  bool GetCase()
+  {
+    CaseName  = CasePath.GetFilename();
+
+    String case_folder = CasePath.GetFilePath(),
+           evidence_cache_folder = String::Format("{0}\\EvidenceCache", case_folder);
+
+    if ((int pos = CaseName.Find(".")) > 0)
+    {
+      CaseName =  CaseName.SubString(0, pos);
+      C = new CaseClass(null, CaseName);
+      C.SetUseBaseFolder(true);
+      C.SetPrimaryEvFolder(evidence_cache_folder);
+      if (AddEvidence())
+      {
+        return C.Write(CasePath);
+      }
+    }
+    return false;
+  }
+
+  bool AddEvidencePathToCase(EvidencePathClass path)
+  {
+    EvidenceOpenClass evopen();
+    evopen.SetMountOptions(MOUNTTOCACHE | MOUNTFROMCACHE | MOUNTNOPOPUP); // Will not handle BitLocker, etc.
+    EvidenceClass ev();
+    ev.SetOpenMode(OPENEVIDENCEFILE);
+    new EvidencePathClass(ev.EvidencePathRoot(), path.Name());
+    return ev.AddToCase(C, evopen);
+  }
+
+  bool AddEvidenceListToCase(EvidencePathClass ev_list)
+  {
+    foreach (EvidencePathClass path in ev_list)
+    {
+      if (!AddEvidencePathToCase(path))
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool AddEvidence()
+  {
+    DirectoryClass dir();
+    DirRootClass dir_root(LocalMachine);
+    if (dir_root.GetListing(EvidenceFolder, dir))
+    {
+      EvidencePathClass ev_list();
+      foreach (DirectoryClass d in dir)
+      {
+        if (EvExtensions.Find(d.Extension()))
+        {
+          new EvidencePathClass(ev_list, String::Format("{0}\\{1}", EvidenceFolder, d.Name()));
+        }
+      }
+      if (ev_list.Count())
+      {
+        return AddEvidenceListToCase(ev_list);
+      }
+    }
+    return false;
+  }
+
+
+
+  bool Process()
+  {
+    NameListClass args();
+    new NameListClass(args, "-RunAutomated");
+    return SystemClass::RunScript(C4AllPath, C, RUNWAIT, args);
+  }
+
+  bool ProcessEvidence(const String &ep_options_path, String &error_message)
+  {
+    bool all_evidence_processed;
+    EPManagerClass manager();
+
+   /*
+    * Process all evidence in the  case
+    */
+
+    if (manager.AddProcessingJobs(C, C.EvidenceRoot(), ep_options_path))
+    {
+      uint timeout_in_seconds = timeout_in_minutes * 60;
+      bool over_time_limit;
+
+      DateClass start(),
+                now();
+
+      start.Now();
+
+      do
+      {
+        /*
+         * Can't find a way to check the processing status other than
+         * by closing and re-opening the case.
+         */
+
+        C = new CaseClass(null, CaseName);
+        C.Read(CasePath);
+
+        all_evidence_processed = true;
+        foreach (EvidenceClass ev in C.EvidenceRoot())
+        {
+          all_evidence_processed = all_evidence_processed && ev.IsProcessed();
+          if (!all_evidence_processed)
+          {
+            break;
+          }
+        }
+        now.Now();
+        if ((now.GetUnix() - start.GetUnix()) > timeout_in_seconds)
+        {
+          over_time_limit = true;
+          break;
+        }
+        SystemClass::Sleep(1000);
+      }
+      while (!all_evidence_processed && !over_time_limit);
+      if (!all_evidence_processed)
+      {
+        error_message = "Time limit exceeded!";
+      }
+    }
+    else
+    {
+      error_message = "Unable to add processing job!";
+    }
+    return all_evidence_processed;
+  }
+
+  String GetEPOptionsPath()
+  {
+    String unc_app_path = String::Format("\\\\127.0.0.1\\{0}", SystemClass::AppPath());
+    unc_app_path.Replace(":", "$");
+    return String::Format("{0}\\ProcessorOptions\\{1}", unc_app_path, enproc_file_name);
+  }
+}
