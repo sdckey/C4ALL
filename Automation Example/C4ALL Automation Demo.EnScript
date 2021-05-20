@@ -3,41 +3,52 @@
  *  the following:
  *
  *  1) Creation of a case with a specific path/name.
- *  2) Addition of evidence from a specific folder.
+ *  2) Addition of evidence from a specified folder.
  *  3) Evidence processing of said evidence so as to
  *     mount compound files and perform hash/signature
  *     analysis.
- *  4) Saving the case.
- *  5) Extraction of pictures, movies and other media
+ *  4) Extraction of pictures, movies and other media
  *     by running C4ALL V2.0.10.0 BETA in automated
  *     mode using the '-RunAutomated' command-line
- *     parameter.
+ *     switch.
+ *  5) Saving the case.
  *
  *  When running in automated mode, C4ALL will write its
  *  output to the current case's export folder using the
  *  settings that were saved when the script was last
- *  run via the GUI. No dialog will be presented.
+ *  run using the GUI. No dialog will be presented.
  *
  *  The evidence processor's settings-file should be created
  *  beforehand using the evidence processor dialog in EnCase.
  *  The script expects this file to be located in the
  *  'ProcessorOptions' sub-folder of the EnCase program folder.
  *  The settings-file accompanying this example must be copied
- *  to that folder beforehand.
+ *  to that folder beforehand - see below for more information.
  *
  *  The script is designed to be invoked from the command-
  *  line using a batch file called 'demo.cmd', which should
- *  accompany this script. The paths specified in the batch
- *  file must be adjusted before running the script on the
- *  examiner's machine.
+ *  have accompanied this script. The paths specified in the
+ *  batch file must be adjusted before running the script on
+ *  the examiner's machine.
  *
  *  The folder specified for the case file must exist before
- *  running the script albeit the script will create the case
- *  and associated folder structure.
+ *  running the script albeit the script will create the case-
+ *  file itself and the associated folder structure.
  *
- *  It's unclear why, but one current limitation is that
- *  EnCase must not be running beforehand or else an error
- *  will be generated.
+ *  The script can also be run in interactive mode in which
+ *  case it will prompt for the path to the new case file,
+ *  the evidence folder (the dialog box for this may pop-up
+ *  behind the EnCase GUI), and the path to C4ALL.
+ *
+ *  EnCase requires the location of the *.EnProc file to
+ *  be specified as a UNC path. The name of this file is
+ *  currently hard-coded into the script, but this could be
+ *  changed.
+ *
+ *  It's unclear why, but a current limitation requires
+ *  EnCase not to be running beforehand otherwise an error
+ *  will be generated or the instance of EnCase running
+ *  the script will terminate.
  *
  *  Tested using EnCase 21.1.0.68 and C4ALL V2.0.10.0 BETA.
  *
@@ -47,7 +58,7 @@
  *  Snr. Curriculum Developer - Learning Services (EnCase)
  *  OpenText Security (Reading Office, UK)
  *
- *  19th May 2021
+ *  20th May 2021
  */
 
 class MainClass {
@@ -112,7 +123,7 @@ class MainClass {
         }
         else
         {
-          Console.WriteLine("Can't get the processor options (*.EnProc) file.");
+          Console.WriteLine("Can't locate the EnCase processor-options file at '{0}'.", ep_options_path);
         }
       }
       else
@@ -131,8 +142,9 @@ class MainClass {
 
   bool GetEvidenceFolderAndCasePathFromDialogs()
   {
-    return SystemClass::PathDialog(CasePath, "Choose case path", "case", "EnCase Case Files\t*.case", CREATE) &&
-           SystemClass::FolderDialog(EvidenceFolder, "Choose evidence folder");
+    return SystemClass::PathDialog(CasePath, "Choose path of EnCase case file to create", "case", "EnCase Case Files\t*.case", CREATE) &&
+           SystemClass::FolderDialog(EvidenceFolder, "Choose evidence folder") &&
+           SystemClass::PathDialog(C4AllPath, "Specify location of C4ALL (C4All.EnScript)", "EnScript", "EnCase EnScript Files\t*.EnScript", OPEN);
   }
 
   bool GetEvidenceFolderAndCasePath()

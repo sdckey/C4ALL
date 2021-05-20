@@ -6,7 +6,7 @@ set case_path="C:\Users\simon\Desktop\C4ALL Automation Test\Demo Case\Demo Case.
 
 set script_path="C:\Users\simon\Desktop\C4ALL Automation Test\C4ALL Automation Demo.EnScript"
 
-set evidence_path="C:\Users\simon\Desktop\Evidence Sets\Howe"
+set evidence_path="C:\Users\simon\Desktop\C4ALL Automation Test\Evidence"
 
 set c4all_path="C:\Users\simon\Documents\C4ALL\C4All.EnScript"
 
