@@ -1,0 +1,190 @@
+class WebPChunkClass : NameListClass
+{
+  ulong                                                    _Offset;
+
+  uint                                                     _TotalSize,
+                                                           _DataSize;
+
+  WebPChunkClass(WebPChunkClass parent = null, const String &name = "", uint options = 0) :
+    super(parent, name, options)
+  {
+
+  }
+
+  bool Read(FileClass f, NameListClass valid_chunk_codes)
+  {
+    _Offset = f.GetPos();
+    String code;
+    f.SetCodePage(CodePageClass::ANSI);
+    f.ReadString(code, 4);
+    SetName(code);
+    _DataSize = f.ReadBinaryInt(4);
+    if (_DataSize % 2) // Odd-sized chunks have a single padding byte
+    {
+      _DataSize++;
+    }
+    if (!valid_chunk_codes.Find(Name()))
+    {
+      TraceClass::GotInvalidType(String::Format("Got invalid chuck code: '{0}'.", Name()));
+      return false;
+    }
+    if (_DataSize == 0)
+    {
+      return false;
+    }
+    _TotalSize = _DataSize + 8;
+    f.Seek(_Offset + _TotalSize);
+    return true;
+  }
+
+}
+
+class WebPFileClass
+{
+  static const String                                                  GREPKeyword   = "RIFF....WEBP",
+                                                                       FileExtension = "WEBP";
+
+
+  static const uint                                                    FileMagicOne = 0x46464952,
+                                                                       FileMagicTwo = 0x50424557;
+
+  static const String                                                  KnownChunkCodes    = "VP8\x20,VP8L,VP8X,ANIM,ANMF,ALPH,ICCP,EXIF,XMP",
+                                                                       RequiredChunkCodes = "VP8\x20,VP8L,VP8X";
+
+  WebPChunkClass                                                       Chunks;
+
+  ItemClass                                                            I;
+
+  FileClass                                                            F;
+
+  long                                                                 Offset,
+                                                                       TargetSize,
+                                                                       ActualSize;
+
+  NameListClass                                                        ValidChunkCodes;
+
+  WebPFileClass(ItemClass i, FileClass f, long offset, NameListClass valid_chunk_codes) :
+    Chunks(),
+    I = i,
+    F = f,
+    Offset = offset,
+    ValidChunkCodes = valid_chunk_codes
+  {
+  }
+
+  static bool IsValid(FileClass f, ulong max_size)
+  {
+    bool retval;
+    long offset = f.GetPos();
+    if (f.ReadBinaryInt(4) == FileMagicOne)
+    {
+      uint size = f.ReadBinaryInt(4);
+      if (size <= max_size)
+      {
+        if (f.ReadBinaryInt(4) == FileMagicTwo)
+        {
+          f.Seek(offset);
+          retval = true;
+        }
+      }
+    }
+    return retval;
+  }
+
+  bool HasRequiredBoxes()
+  {
+    return Chunks.Find("VP8\x20") || Chunks.Find("VP8L") || Chunks.Find("VP8X");
+  }
+
+  bool Read(ulong max_size, String &error_message)
+  {
+    bool retval, is_ok = true;
+    F.Seek(Offset);
+    F.Skip(4); // Skip 'RIFF'
+    TargetSize = 8 + F.ReadBinaryInt(4);
+    F.Skip(4); // Skip 'WEBP'
+    ActualSize = 12;
+    while (is_ok && F.More())
+    {
+      WebPChunkClass chunk();
+      if (is_ok = chunk.Read(F, ValidChunkCodes))
+      {
+        Chunks.Insert(chunk);
+        ActualSize += chunk._TotalSize;
+        if (ActualSize > max_size)
+        {
+          error_message = "File-data exceeeds maximum size.";
+          return false;
+        }
+      }
+    }
+    retval = (ActualSize == TargetSize) && HasRequiredBoxes();
+    if (!retval)
+    {
+      error_message = "File is the wrong size or does not have the required components.";
+    }
+    return retval;
+  }
+
+  String GetBoxList()
+  {
+    String retval;
+    MemoryFileClass t();
+    if (t.Open(512, WRITETEXTCRLF))
+    {
+      bool need_comma;
+      foreach (WebPChunkClass c in Chunks)
+      {
+        if (need_comma)
+        {
+          t.Write(", ");
+        }
+        else
+        {
+          need_comma = true;
+        }
+        t.Write(c.Name());
+      }
+      t.MoveToString(retval);
+    }
+    return retval;
+  }
+
+  void WriteBoxesToConsole()
+  {
+    if (Chunks.Count())
+    {
+      Console.WriteLine("{0}, {1}", GetBoxList(), TargetSize);
+    }
+  }
+
+  bool Extract(const String &output_folder, uint counter, String &error_message)
+  {
+    bool retval;
+    String name = String::Format("{0} ({1}, {2})", I.Name(), Offset, TargetSize),
+           name_with_extension = String::Format("{0}.{1}", name, FileExtension),
+           output_path = String::Format("{0}\\{1} - {2}", output_folder, String::FormatInt(counter, int::DECIMAL, 0, 6), name_with_extension);
+    LocalFileClass lf();
+    if (lf.Open(output_path, WRITE))
+    {
+      F.Seek(Offset);
+      lf.WriteBuffer(F, TargetSize);
+      error_message = String::Format("Wrote data to '{0}'.", output_path);
+      retval = true;
+    }
+    else
+    {
+      error_message = String::Format("Unable to open output file at '{0}'.", output_path);
+    }
+    return retval;
+  }
+
+  void Bookmark(BookmarkClass folder, const String &comment)
+  {
+    BookmarkDecodeClass dec(folder);
+    dec.SetDataOffset(Offset);
+    dec.SetDataSize(TargetSize);
+    dec.CopyItemData(I);
+    dec.SetComment(comment);
+  }
+}

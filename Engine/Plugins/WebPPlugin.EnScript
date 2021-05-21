@@ -1,0 +1,294 @@
+include "..\\Core Files\\Interfaces\\PicturePluginInterface"
+include "WebP Library\\SK_WebPLib"
+
+class WebpPlugin;
+
+// Dialog Class exposing variables specific to this format
+
+class WebpDialog: DialogClass
+{
+  WebpPlugin                  WebP;
+  CheckBoxClass               chkEnabled;
+  ButtonClass                 btnHelpText;
+  StringEditClass             strValidChunkCodes;
+  UIntEditClass               uintMaxSizeToExtractInMB;
+
+  WebpDialog(DialogClass parent, WebpPlugin webp) :
+    DialogClass    (parent, webp._pluginName),
+    WebP = webp,
+    chkEnabled(this, "Search for WebP pictures", START, START, DEFAULT, DEFAULT, 0, WebP._enabled),
+    btnHelpText(this, "Help", 275, SAME, DEFAULT, DEFAULT, 0),
+    strValidChunkCodes(this, "Comma-delimited list of valid chunk codes", START, NEXT, 300, DEFAULT, 0, WebP._validChunks, -1, REQUIRED),
+    uintMaxSizeToExtractInMB(this, "Maximum size of file to extract (MB)", START, NEXT, 50, DEFAULT, 0,  WebP._maxSizeToExtractInMB, 1, 0x7fffffff, REQUIRED)
+  {
+  }
+
+  virtual void ChildEvent(const WindowClass::EventClass &event)
+  {
+    if (btnHelpText.Matches(event))
+    {
+      SystemClass::Message(ICONINFORMATION, WebP._pluginName, WebP._helpText);
+    }
+    super::ChildEvent(event);
+  }
+
+  virtual bool CanClose()
+  {
+    bool retval = super::CanClose();
+    if (retval)
+    {
+      String current_list = strValidChunkCodes.GetText();
+      retval = WebP._buildChunkList(current_list);
+      if (!retval)
+      {
+        ErrorMessage(String::Format("List of valid chunk codes must contain the following entries at least: {0}.", WebPFileClass::RequiredChunkCodes));
+      }
+    }
+    if (retval)
+    {
+      WebP._maxSizeToExtract = WebP._maxSizeToExtractInMB * 1024 * 1024;
+    }
+    return retval;
+  }
+}
+
+
+// Actual Format class, which implements the PicturePluginInterface
+
+class WebpPlugin : PicturePluginInterface
+{
+
+  WebpDialog  _dlg;
+
+  bool              _enabled;
+
+  double            _aspectRatio;
+  double            _bitDepth;
+
+  int               _headerIndex;
+
+  uint              _maxSizeToExtractInMB;
+
+  long              _rangeToIgnoreSearchHits;
+  long              _maxSizeToExtract;
+
+  String            _extension;
+  String            _header;
+  String            _metaData;
+  String            _pluginName;
+  String            _version;
+  String            _validChunks;
+  String            _helpText;
+
+  NameListClass     _validChunksList,
+                    _requiredChunksList;
+
+
+  // Plugin's Constructor, where the base values are set and any readable values
+  // are loaded from the Storage file
+  WebpPlugin() :
+    _validChunks(WebPFileClass::KnownChunkCodes),
+    _validChunksList(),
+    _requiredChunksList(),
+    _maxSizeToExtractInMB = 10240,
+    _pluginName("C4P Plugin - WEBP"),
+    _enabled = true,
+    _extension(WebPFileClass::FileExtension),
+    _header(WebPFileClass::GREPKeyword),
+    _version("1.0.0"),
+    _helpText
+    (
+      "This plugin searches for WebP pictures.\n\n"
+
+      "The plugin identifies each picture using the GREP signature, 'RIFF....WEBP'.\n\n"
+
+      "This represents the 12-byte WEBP header, the middle 4-bytes of which contain "
+      "the size of data that follows.\n\n"
+
+      "That data will consist of one or more chunks each starting with a 4-character code, e.g., "
+      "'\VP8\x20\' (the space at the end is intentional), 'VP8L', 'VP8X', 'ANIM', "
+      "'ANMF', 'ALPH', 'ICCP', 'EXIF' and 'XMP'.\n\n"
+
+      "The plugin finds the end of a WEBP file by seeking from one chunk to another "
+      "until it reaches data that does not contain a valid chunk-code. It then checks "
+      "that the size of the data parsed thus far accords with the size stored in the "
+      "file's 12-byte WEBP header.\n\n"
+
+      "The examiner can specify the chunk-codes that are to be treated as valid albeit the "
+      "'\VP8\x20\', 'VP8L', 'VP8X' codes are required - a valid WEBP file must have one "
+      "of these chunks.\n\n"
+
+      "It's important to note that the plugin does not check the validity of each "
+      "chunk, so the examiner should expect some chunks to be incomplete and/or "
+      "partially overwritten if found in unused disk space. This will be "
+      "particularly relevant to the last chunk due to it not being bounded by "
+      "another chunk.\n\n"
+
+      "Report bugs, etc, to:\n\n"
+
+      Lang::AUTHOR_SIMON "\n\n"
+
+      "21st May, 2021"
+    )
+  {
+    _requiredChunksList.Parse(WebPFileClass::RequiredChunkCodes, ",");
+    _loadSettings();
+    _maxSizeToExtract = _maxSizeToExtractInMB * 1024 * 1024;
+    _buildChunkList(_validChunks);
+  }
+
+  bool _buildChunkList(const String &current_list)
+  {
+    _validChunksList.Close();
+    NameListClass chunks();
+    chunks.Parse(current_list, ",");
+    String t;
+    foreach (NameListClass chunk in chunks)
+    {
+      t = chunk.Name();
+      t.Trim(" ", TRIMSTART | TRIMEND);
+      if (t.Compare("VP8") == 0) t = "VP8\x20"; // Must reinstate the space at the end
+      if (t && !_validChunksList.Find(t))
+      {
+        new NameListClass(_validChunksList, t);
+      }
+    }
+    return _gotRequiredChunks();
+  }
+
+  bool _gotRequiredChunks()
+  {
+    bool retval;
+    if (_validChunksList.Count() >= _requiredChunksList.Count())
+    {
+      retval = true;
+      foreach (NameListClass required in _requiredChunksList)
+      {
+        if (!_validChunksList.Find(required.Name()))
+        {
+          retval = false;
+          break;
+        }
+      }
+    }
+    return retval;
+  }
+
+  void _loadSettings(){
+    StorageClass myStorage(_pluginName, 0);
+    _settings(myStorage);
+  }
+
+  void _settings(StorageClass myStorage){
+    myStorage.Value("Enabled", _enabled);
+    myStorage.Value("ValidChunks", _validChunks);
+    myStorage.Value("MaxSizeToExtractInMB", _maxSizeToExtractInMB);
+  }
+
+  long _validate(EntryClass e, long offset)
+  {
+    long retval;
+
+    // Reset the classwide variables
+    _aspectRatio = 0;
+    _bitDepth    = 0;
+    _metaData    = "";
+
+    EntryFileClass ef();
+
+    if(ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE))
+    {
+      WebPFileClass wp(e, ef, offset, _validChunksList);
+      String error_message;
+      if (wp.Read(_maxSizeToExtract, error_message))
+      {
+        retval = wp.TargetSize;
+      }
+    }
+    return retval;
+  }
+
+
+
+
+  // =======================================================================================
+  // Interface Functions that MUST be present and SHOULD tie in with the rest of your script
+
+  virtual String Version(){
+    return _version;
+  }
+  virtual MemoryFileClass GetMemoryFileClass(){
+    return null;
+  }
+  virtual bool Enabled(){
+    return _enabled;
+  }
+  virtual void SetEnabled(const bool &val){
+    _enabled = val;
+  }
+
+  virtual String Extension(){
+    return _extension;
+  }
+  virtual void SetExtension(const String &val){
+    _extension = val;
+  }
+
+  virtual String Header(){
+    return _header;
+  }
+  virtual void SetHeader(const String &val){
+    _header = val;
+  }
+
+  virtual String MetaData(){
+    return _metaData;
+  }
+
+  virtual DialogClass GetDialog(DialogClass parent){
+    _dlg = new WebpDialog(parent, this);
+    return _dlg;
+  }
+
+  virtual long Validate(EntryClass e, long offset){
+    return _validate(e, offset);
+  }
+
+  virtual double AspectRatio(){
+    return _aspectRatio;
+  }
+
+  virtual double BitDepth(){
+    return _bitDepth;
+  }
+
+  virtual int HeaderIndex(){
+    return _headerIndex;
+  }
+  virtual void SetHeaderIndex(int val){
+    _headerIndex = val;
+  }
+
+  virtual void SaveSettings(){
+    StorageClass myStorage(_pluginName, StorageClass::WRITE);
+    _settings(myStorage);
+  }
+
+  virtual String PluginName(){
+    return _pluginName;
+  }
+  virtual void SetPluginName(const String &val){
+    _pluginName = val;
+  }
+  virtual long BytesPrecedingHeader(){
+    return 0;
+  }
+  virtual long RangeToIgnoreSearchHits(){
+    return _rangeToIgnoreSearchHits;
+  }
+  virtual long SmallFileLimit(){
+    return 51200;  // 50kb
+  }
+  // =======================================================================================
+}
+

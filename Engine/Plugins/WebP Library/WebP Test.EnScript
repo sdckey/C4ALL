@@ -1,0 +1,41 @@
+include "SK_WebPLib"
+
+class MainClass {
+  void Main(CaseClass c) {
+    SystemClass::ClearConsole(1);
+    ulong max_size = 20 * 1024 * 1024;
+    String error_message;
+    for (ItemIteratorClass iter(c, NORECURSE | NOPROXY, CURRENTVIEW_SELECTED); EntryClass e = iter.GetNextEntry();)
+    {
+      error_message = "";
+      EntryFileClass f();
+      if (f.Open(e))
+      {
+        if (Test(e, f, max_size, error_message))
+        {
+          Console.WriteLine("All good");
+        }
+        else
+        {
+          Console.WriteLine("Can't parse '{0}'", e.ItemPath());
+        }
+      }
+    }
+  }
+
+  bool Test(EntryClass e, FileClass f, ulong max_size, String &error_message)
+  {
+    bool retval;
+    if (WebPFileClass::IsValid(f, max_size))
+    {
+      NameListClass valid_chunk_codes();
+      valid_chunk_codes.Parse(WebPFileClass::KnownChunkCodes, ",");
+      WebPFileClass wp(e, f, 0, valid_chunk_codes);
+      if (wp.Read(max_size, error_message))
+      {
+        retval = true;
+      }
+    }
+    return retval;
+  }
+}

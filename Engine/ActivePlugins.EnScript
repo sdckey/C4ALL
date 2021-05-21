@@ -38,6 +38,7 @@ include "Plugins\\PsdPlugin"
 include "Plugins\\TiffPlugin"
 include "Plugins\\Tiff2Plugin"
 include "Plugins\\WavPlugin"
+include "Plugins\\WebPPlugin"
 include "Plugins\\WmfPlugin"
 include "Plugins\\WmfRtfPlugin"
 include "Plugins\\WmvPlugin"
@@ -74,6 +75,7 @@ class ActivePlugins{
   TiffPlugin              tifPlugin;
   Tiff2Plugin             tif2Plugin;
   WavPlugin               wavPlugin;
+  WebpPlugin              webpPlugin;
   WmfPlugin               wmfPlugin;
   WmfRtfPlugin            wmf2Plugin;
   WmvPlugin               wmvPlugin;
@@ -155,6 +157,9 @@ class ActivePlugins{
 
     tif2Plugin = new Tiff2Plugin();
     new PluginList(myPlugins, tif2Plugin);
+
+    webpPlugin = new WebpPlugin();
+    new PluginList(myPlugins, webpPlugin);
 
     wmfPlugin = new WmfPlugin();
     new PluginList(myPlugins, wmfPlugin);
