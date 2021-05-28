@@ -16,7 +16,7 @@ The TIFF and DNG plugins may appear to be duplicates, but they're not.
 
 TIFF and DNG files share the same signature of which there are two versions: one signifying big-endian byte-encoding ('MM') and one, little-endian ('II').
 
-The C4ALL plugin architecture does not support multiple keywords per plugin, so two plugins are used for each file-type.
+The C4ALL plugin architecture does not support multiple keywords per plugin, so there are two plugins for each file-type.
 
 ## Disclaimer
 
