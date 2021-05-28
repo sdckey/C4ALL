@@ -11,6 +11,13 @@ Note that all files must be extracted from a release-archive preserving the rela
 
 Please be sure to remove script and plugin settings from `%PROGRAMDATA%\EnCase\<version>\Storage` before running a new version.
 
+# A Note Regarding the TIFF and DNG Plugins
+The TIFF and DNG plugins may appear to be duplicates, but they're not.
+
+TIFF and DNG files share the same signature of which there are two versions: one signifying big-endian byte-encoding ('MM') and one, little-endian ('II').
+
+The C4ALL plugin architecture does not support multiple keywords per plugin, so two plugins are needed for each file-type.
+
 ## Disclaimer
 
 This script is not an official OpenText product.
