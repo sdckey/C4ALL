@@ -45,6 +45,8 @@ class SettingsDialog: DialogClass {
   // Selected Files Options
   RadioButtonClass  radSelection;
 
+  ButtonClass       btnCompoundFileHelp;
+
   // Search Options
   GroupBoxClass     grpSettings;
 
@@ -93,12 +95,15 @@ class SettingsDialog: DialogClass {
                                                                                                   "Search All Tagged Files\t"
                                                                                                   "Exclude All Tagged Files\t" +
                                                                                                   "Search Current View Only"),
+
+      btnCompoundFileHelp(this, "Compound file help", 45, 160, DEFAULT, DEFAULT, 0),
+
       // Search Options
-      grpSettings  (this, "Search Options:",                 10, 160, 150, 85, 0),
-      btnPlugins   (this, "Change Plugin Settings",          20, 175, 135, 12, 0),
+      grpSettings  (this, "Search Options:",                 10, 180, 150, 65, 0),
+      btnPlugins   (this, "Change Plugin Settings",          20, 195, 135, 12, 0),
       lblFormats   (this, myActivePlugins.GetSelected() + " / " + myActivePlugins.myPlugins.Count() + " Plugins available",
-                                                             42, 190, 100, 12, 0),
-      chkNoSmall   (this, "Ignore Small Files",              20, 205, 135, 12, 0, myOptions.IgnoreSmall),
+                                                             42, 210, 100, 12, 0),
+      chkNoSmall   (this, "Ignore Small Files",              20, 225, 135, 12, 0, myOptions.IgnoreSmall),
 
       // Database & Library Options
       radDatabase  (this, "Pre-Categorization Options:",    180,  80, 130, 85, 0, myOptions.DbType, "No Database\tSQL Server\tmySQL"),
@@ -149,11 +154,21 @@ class SettingsDialog: DialogClass {
         txtDebug.SetVisible(false);
       }
     }
+
     else if(btnHelp.Matches(event)){
       MyHelp.ShowHelp(1003);
     }
+
     else if(chkSaveConsole.Matches(event)){
       MyConsole.SaveConsoleChanged(chkSaveConsole.GetValue());
+    }
+
+    else if (btnCompoundFileHelp.Matches(event))
+    {
+      SystemClass::Message(ICONINFORMATION, "Compound File Help", "Compound files must be mounted before processing, either manually or by using the Evidence Processor.\n\n"
+
+                                                                  "Furthermore, the contents of a mounted compound file won't be processed automatically just because the "
+                                                                  "compound file itself is in the current view or has been tagged.");
     }
 
     // What to do if the user clicks the formats button

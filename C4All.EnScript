@@ -32,13 +32,13 @@ class MainClass:ObserverInterface {
   MainClass()
   {
     MyOptions = new OptionsClass();
-    MyOptions.CompileDate     = "21-May-2021";
+    MyOptions.CompileDate     = "20-Sep-2021";
     MyOptions.ScriptName      = "C4All Strategy (EnCase 7/8/20/21)";
-    MyOptions.VersionNum      = "2.0.11.0 BETA";
+    MyOptions.VersionNum      = "2.0.12.0 BETA";
     MyOptions.VersionMajor    = 21;
-    MyOptions.VersionMinor    = 1;
-    MyOptions.VersionSubMajor = 0;
-    MyOptions.VersionSubMinor = 68;
+    MyOptions.VersionMinor    = 3;
+    MyOptions.VersionSubMajor = 1;
+    MyOptions.VersionSubMinor = 4;
 
     // This is the only legitimate construction of the ConsoleController
     MyConsole = new ConsoleController(MyOptions);
