@@ -18,6 +18,11 @@ TIFF and DNG files share the same signature of which there are two versions: one
 
 The C4ALL plugin architecture does not support multiple keywords per plugin, so there are two plugins for each file-type.
 
+## A Note Regarding Compound Files
+Compound files must be mounted before processing, either manually or using the Evidence Processor.
+
+Furthermore, the contents of mounted compound files won't be processed automatically just because the compound file itself is in the current view or has been tagged. 
+
 ## Disclaimer
 
 This script is not an official OpenText product.
