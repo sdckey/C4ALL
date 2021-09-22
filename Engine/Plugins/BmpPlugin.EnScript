@@ -60,13 +60,18 @@ class BmpPlugin:PicturePluginInterface{
     _pluginName = "C4P Plugin - BMP";
     _enabled = true;
     _extension = "BMP";
-    _header = "\\x42\\x4D....\\x00\\x00\\x00\\x00....\\x28";
+
+   /*
+    *  Keyword locates V3, V4 and V5 bitmaps.
+    */
+
+    _header = "\\x42\\x4D....\\x00\\x00\\x00\\x00....[\\x28\\x6c\\x7c]";
     _metaData = "";
     _bmpMin = 0;
     _bmpMax = 20000000;  // 20 MB maximum, hard-coded.  Minimum can be anywhere from 0 to 10MB
     _loadSettings();
 
-    _version = "1.0.0";
+    _version = "2.0.0";
   }
 
   void _loadSettings(){
@@ -102,7 +107,7 @@ class BmpPlugin:PicturePluginInterface{
     EntryFileClass ef();
 
     ef.Open(e, FileClass::SLACK | FileClass::NOINITIALIZE);
-    
+
     if(ef){
       ef.Seek(offset);
 
@@ -126,50 +131,40 @@ class BmpPlugin:PicturePluginInterface{
       // BitmapHeader
 
       // Size (4 bytes)
-      long headerSize = ef.ReadBinaryInt(4, false);
+      ef.Skip(4);
 
-      if(headerSize == 12){
-        // BMP v2.x has 2 byte values for the height and width
+      // BMP v3.x and higher have 4 byte values for the height and width.
 
-        // Width (2 bytes)
-        imgWidth = ef.ReadBinaryInt(2, false);
-        if(imgWidth < 0)
-          imgWidth = imgWidth * -1;
+      // Width (4 bytes)
+      imgWidth = ef.ReadBinaryInt(4, false);
+      if(imgWidth < 0)
+        imgWidth = imgWidth * -1;
 
-        //Height (2 bytes)
-        imgHeight = ef.ReadBinaryInt(2, false);
-        if(imgHeight < 0)
-          imgHeight = imgHeight * -1;
+      //Height (4 bytes)
+      imgHeight = ef.ReadBinaryInt(4, false);
+      if(imgHeight < 0)
+        imgHeight = imgHeight * -1;
 
-        // Planes (2 bytes)
-        ef.Skip(2);
+      // Planes (2 bytes)
+      ef.Skip(2);
 
-        // BitsPerPixel (2 bytes)
-        _bitDepth = ef.ReadBinaryInt(2, false);
+      // BitsPerPixel (2 bytes)
+      _bitDepth = ef.ReadBinaryInt(2, false);
 
-      } else {
-        // BMP v3.x and higher have 4 byte values for the height and width
-
-        // Width (4 bytes)
-        imgWidth = ef.ReadBinaryInt(4, false);
-        if(imgWidth < 0)
-          imgWidth = imgWidth * -1;
-
-        //Height (4 bytes)
-        imgHeight = ef.ReadBinaryInt(4, false);
-        if(imgHeight < 0)
-          imgHeight = imgHeight * -1;
-
-        // Planes (2 bytes)
-        ef.Skip(2);
-
-        // BitsPerPixel (2 bytes)
-        _bitDepth = ef.ReadBinaryInt(2, false);
-      }
 
       // Evaluate the BitDepth marker - to verify this is a real bitmap file
-      if(_bitDepth == 1 || _bitDepth == 4 || _bitDepth = 8 || _bitDepth == 24){
-      } else {
+      if(_bitDepth == 1  ||
+         _bitDepth == 2  ||
+         _bitDepth == 4  ||
+         _bitDepth == 8  ||
+         _bitDepth == 16 ||
+         _bitDepth == 24 ||
+         _bitDepth == 32 ||
+         _bitDepth == 64)
+      {
+      }
+      else
+      {
         WriteDebug("BmpClass", "Invalid bitDepth: " + _bitDepth, true);
         carveSize = 0;
       }
