@@ -135,8 +135,6 @@ class MainClass:ObserverInterface {
       SettingsController sc(MyOptions);
       MyOptions.ReportPath = c.ExportFolder();
 
-      MyConsole.SaveConsoleChanged(MyOptions.SaveConsole);
-
       // Step 2:  Check the version of EnCase against this Script;
       VersionController vc(MyOptions);
       if(vc.CheckVersion() == false){
@@ -154,7 +152,6 @@ class MainClass:ObserverInterface {
       // ===========================================================================
 
       if(RunAutomated() || (mainDlg.Execute() == SystemClass::OK)){
-
         if (RunAutomated())
         {
           Console.WriteLine(MyOptions.ScriptName + ": Running in automated mode");
@@ -162,6 +159,9 @@ class MainClass:ObserverInterface {
 
         // Step 6: Save the settings, as they may be changed by the user
         sc.SaveSettings();
+
+        MyConsole.SaveConsoleChanged(MyOptions.SaveConsole);
+
         foreach(PluginList p in MyActivePlugins.myPlugins){
           p.Plugin.SaveSettings();
         }
@@ -254,7 +254,7 @@ class MainClass:ObserverInterface {
           Console.WriteLine(MyOptions.ScriptName + ": End");
         }
       } else {
-        MyConsole.WriteLine("Script Terminated by User\n");
+        Message("Information", "Script cancelled.\n");
         Console.WriteLine(MyOptions.ScriptName + ": End");
       }
     } else {

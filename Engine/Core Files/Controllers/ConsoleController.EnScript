@@ -21,7 +21,10 @@ class ConsoleController {
   ~ConsoleController()
   {
     if(MyOptions.SaveConsole)
-      console.Close();
+      if (console)
+      {
+        console.Close();
+      }
   }
 
   void SaveConsoleChanged(bool val)
@@ -38,6 +41,7 @@ class ConsoleController {
 
       console = new LocalFileClass();
       console.Open(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\Console\\Console_0.txt", FileClass::WRITETEXTCRLF);
+      DebugClass::Assert(console.IsOpen(), "ConsoleController's output file is not open!");
     }
     else
     {
@@ -55,6 +59,7 @@ class ConsoleController {
       counter++;
       if(console) console.Close();
       console.Open(MyOptions.ReportPath + "\\C4Allv2 - " + MyOptions.CaseName + "\\Console\\Console_" + counter + ".txt", FileClass::WRITETEXTCRLF);
+      DebugClass::Assert(console.IsOpen(), "ConsoleController's output file is not open!");
     }
   }
 
