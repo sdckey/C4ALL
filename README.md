@@ -5,7 +5,7 @@ Download releases from the [Releases](https://github.com/sdckey/C4ALL/releases) 
 
 Questions, bugs, feature requests, etc. should be posted to the [Issues](https://github.com/sdckey/C4ALL/issues) page.
 
-The latest version of this script supports EnCase 7/8/20/21. EnCase 6 is no longer supported.
+The latest version of this script supports EnCase 7/8/20-22. EnCase 6 is no longer supported.
 
 Note that all files must be extracted from a release-archive preserving the relative paths in the process.
 
