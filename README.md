@@ -23,6 +23,12 @@ Compound files must be mounted before processing, either manually or using the E
 
 Furthermore, the contents of a mounted compound file won't be processed automatically just because the compound file itself is in the current view or has been tagged. 
 
+## A Note Regarding Project VIC Data Output
+
+For a version of the script that supports the Project VIC data output, please see the following repository:
+
+- https://github.com/thebibekbaniya/VicsCarver
+
 ## Disclaimer
 
 This script is not an official OpenText product.
